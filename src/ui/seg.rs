@@ -59,28 +59,21 @@ pub fn number(p: &egui::Painter, rect: Rect, value: u32, count: usize, ink: Colo
     let gap = rect.width() * 0.06 / count as f32;
     let cell_w = (rect.width() - gap * (count as f32 - 1.0)) / count as f32;
 
-    // Decompose into digits, least-significant first.
-    let mut digits = [None; 16];
-    let mut v = value;
-    let mut n = 0;
-    loop {
-        digits[n] = Some((v % 10) as u8);
-        v /= 10;
-        n += 1;
-        if v == 0 || n >= count {
-            break;
-        }
-    }
+    // The digit shown in column `i` from the left maps to decimal place
+    // `count-1-i`; leading places above the value's magnitude stay blank.
+    let digit_at = |i: usize| -> Option<u8> {
+        let place = (count - 1 - i) as u32;
+        let pow = 10u32.checked_pow(place)?;
+        (place == 0 || value >= pow).then_some(((value / pow) % 10) as u8)
+    };
 
+    // Painting is a side effect, so the placement loop stays imperative.
     for i in 0..count {
-        // Column i from the left maps to digit place (count-1-i).
-        let place = count - 1 - i;
-        let d = digits.get(place).copied().flatten();
         let cell = Rect::from_min_size(
             pos2(rect.min.x + i as f32 * (cell_w + gap), rect.min.y),
             vec2(cell_w, rect.height()),
         );
-        digit(p, cell, d, ink, ghost);
+        digit(p, cell, digit_at(i), ink, ghost);
     }
 }
 

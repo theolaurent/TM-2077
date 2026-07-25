@@ -19,6 +19,8 @@ struct Control {
 }
 
 pub struct Metronome {
+    /// Latest UI settings, shared with the audio thread. The UI writes; the
+    /// audio callback reads. Critical sections are tiny (a `Copy` in/out).
     control: Arc<Mutex<Control>>,
     /// Beat currently sounding (0-based), written by the audio callback.
     current_beat: Arc<AtomicU32>,
