@@ -69,10 +69,10 @@ impl WebTuner {
         }
 
         // Build the tracker once the AudioContext's sample rate is known.
-        if self.tracker.is_none() {
-            if let Some(ctx) = &self.ctx {
-                self.tracker = Some(PitchTracker::new(ctx.sample_rate() as u32));
-            }
+        if self.tracker.is_none()
+            && let Some(ctx) = &self.ctx
+        {
+            self.tracker = Some(PitchTracker::new(ctx.sample_rate() as u32));
         }
 
         let got = match self.analyser.try_borrow() {
@@ -87,12 +87,12 @@ impl WebTuner {
             Err(_) => false,
         };
 
-        if got {
-            if let Some(tracker) = self.tracker.as_mut() {
-                self.reading = tracker
-                    .detect(&self.buf)
-                    .and_then(|f| NoteReading::from_freq(f, self.a4));
-            }
+        if got
+            && let Some(tracker) = self.tracker.as_mut()
+        {
+            self.reading = tracker
+                .detect(&self.buf)
+                .and_then(|f| NoteReading::from_freq(f, self.a4));
         }
     }
 

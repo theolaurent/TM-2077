@@ -121,6 +121,9 @@ impl Metronome {
         // Continuous reference-tone state (with a smoothed gain to avoid pops).
         let mut tone_phase: f32 = 0.0;
         let mut tone_gain: f32 = 0.0;
+        // Last active tone frequency, so the gain fade-out after SOUND is turned
+        // off keeps the calibrated pitch instead of snapping to 440.
+        let mut tone_freq: f32 = 440.0;
 
         let err_fn = |e| log::error!("metronome: stream error: {e}");
         let decay_per_sample = 1.0 / (0.035 * sample_rate); // ~35 ms click
@@ -176,10 +179,11 @@ impl Metronome {
                         let target_gain = if ctl.tone.is_some() { 0.18 } else { 0.0 };
                         tone_gain += (target_gain - tone_gain).clamp(-gain_step, gain_step);
                         let tone = if let Some(tf) = ctl.tone {
+                            tone_freq = tf; // remember for the fade-out
                             tone_phase += tf / sample_rate;
                             (tone_phase * std::f32::consts::TAU).sin() * tone_gain
                         } else if tone_gain > 0.0 {
-                            tone_phase += 440.0 / sample_rate;
+                            tone_phase += tone_freq / sample_rate;
                             (tone_phase * std::f32::consts::TAU).sin() * tone_gain
                         } else {
                             0.0
