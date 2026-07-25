@@ -105,7 +105,9 @@ impl Metronome {
         T: SizedSample + FromSample<f32>,
     {
         let sample_rate = cfg.sample_rate.0 as f32;
-        let channels = cfg.channels as usize;
+        // `.max(1)`: `chunks_mut(0)` panics, and the audio callback must never
+        // panic (see AGENTS.md). Guards a device that reports zero channels.
+        let channels = (cfg.channels as usize).max(1);
         let control = self.control.clone();
         let current_beat = self.current_beat.clone();
 

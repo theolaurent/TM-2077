@@ -59,12 +59,19 @@ pub fn number(p: &egui::Painter, rect: Rect, value: u32, count: usize, ink: Colo
     let gap = rect.width() * 0.06 / count as f32;
     let cell_w = (rect.width() - gap * (count as f32 - 1.0)) / count as f32;
 
+    // A value that needs more digits than we have cells can't be shown honestly;
+    // blank the whole field rather than silently displaying its low digits
+    // (e.g. 1319 Hz in 3 cells must not read "319").
+    let fits = 10u32
+        .checked_pow(count as u32)
+        .is_none_or(|cap| value < cap);
+
     // The digit shown in column `i` from the left maps to decimal place
     // `count-1-i`; leading places above the value's magnitude stay blank.
     let digit_at = |i: usize| -> Option<u8> {
         let place = (count - 1 - i) as u32;
         let pow = 10u32.checked_pow(place)?;
-        (place == 0 || value >= pow).then_some(((value / pow) % 10) as u8)
+        (fits && (place == 0 || value >= pow)).then_some(((value / pow) % 10) as u8)
     };
 
     // Painting is a side effect, so the placement loop stays imperative.

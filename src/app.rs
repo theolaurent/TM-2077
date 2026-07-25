@@ -38,7 +38,7 @@ impl Default for Settings {
             bpm: 120,
             beats_per_bar: 4,
             a4: 440.0,
-            tuner_on: true,
+            tuner_on: false,
         }
     }
 }
@@ -129,7 +129,13 @@ fn tapped_bpm(taps: &Vector<f64>) -> Option<u32> {
 
 impl eframe::App for Tm2077App {
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
-        ui.ctx().request_repaint();
+        // Only drive continuous repaints when something is actually animating
+        // (beat dots / needle). Otherwise let egui idle and repaint on input,
+        // saving CPU/GPU — especially in a backgrounded web tab. The metronome
+        // audio is unaffected; it runs on the audio thread.
+        if self.metronome.running || self.tuner_on {
+            ui.ctx().request_repaint();
+        }
 
         // Any click counts as a user gesture (needed to unlock web audio).
         if ui.input(|i| i.pointer.any_click()) {

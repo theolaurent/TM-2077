@@ -117,7 +117,9 @@ impl NativeTuner {
         T: SizedSample,
         f32: FromSample<T>,
     {
-        let channels = cfg.channels as usize;
+        // `.max(1)`: `chunks(0)` panics, and the audio callback must never panic
+        // (see AGENTS.md). Also keeps the mono downmix divisor non-zero.
+        let channels = (cfg.channels as usize).max(1);
         let ring = self.ring.clone();
         device
             .build_input_stream(

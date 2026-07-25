@@ -33,10 +33,11 @@ fn tabs(p: &egui::Painter, r: Rect) {
 fn tuner(p: &egui::Painter, r: Rect, app: &Tm2077App) {
     let reading = if app.tuner_on { app.tuner.reading } else { None };
 
-    // Frequency readout (7-seg) top-left.
-    let hz_rect = rel_rect(r, 0.04, 0.20, 0.26, 0.35);
+    // Frequency readout (7-seg) top-left. Four cells so instruments above
+    // 999 Hz (e.g. violin high E ~1319 Hz) aren't truncated.
+    let hz_rect = rel_rect(r, 0.04, 0.20, 0.30, 0.35);
     let hz = reading.map(|x| x.freq.round() as u32).unwrap_or(0);
-    seg::number(p, hz_rect, hz, 3, Palette::LCD_INK, Palette::LCD_INK_DIM);
+    seg::number(p, hz_rect, hz, 4, Palette::LCD_INK, Palette::LCD_INK_DIM);
     p.text(
         pos2(hz_rect.max.x + 6.0, hz_rect.center().y),
         Align2::LEFT_CENTER,
@@ -119,8 +120,9 @@ fn metronome(p: &egui::Painter, r: Rect, app: &Tm2077App) {
 
     // "BEAT" + beats-per-bar.
     p.text(pos2(r.min.x + r.width() * 0.72, r.min.y + r.height() * 0.60), Align2::LEFT_CENTER, "BEAT", FontId::proportional(11.0), Palette::LCD_INK);
-    let beat_rect = rel_rect(r, 0.88, 0.52, 0.97, 0.72);
-    seg::number(p, beat_rect, m.beats_per_bar, 1, Palette::LCD_INK, Palette::LCD_INK_DIM);
+    // Two cells: BEAT goes up to 12, which a single cell would truncate to "2".
+    let beat_rect = rel_rect(r, 0.845, 0.52, 0.97, 0.72);
+    seg::number(p, beat_rect, m.beats_per_bar, 2, Palette::LCD_INK, Palette::LCD_INK_DIM);
 
     // Running beat indicator dots along the bottom-right.
     let n = m.beats_per_bar.max(1);
