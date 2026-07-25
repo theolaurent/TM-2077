@@ -5,6 +5,7 @@
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::{Arc, Mutex};
 
+use anyhow::{Context as _, Result};
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use cpal::{FromSample, SizedSample};
 
@@ -74,18 +75,18 @@ impl Metronome {
                 }
                 self.stream = Some(stream);
             }
-            Err(e) => log::error!("metronome: audio init failed: {e}"),
+            Err(e) => log::error!("metronome: audio init failed: {e:#}"),
         }
     }
 
-    fn build_stream(&self) -> Result<cpal::Stream, String> {
+    fn build_stream(&self) -> Result<cpal::Stream> {
         let host = cpal::default_host();
         let device = host
             .default_output_device()
-            .ok_or("no default output device")?;
+            .context("no default output device")?;
         let config = device
             .default_output_config()
-            .map_err(|e| format!("default_output_config: {e}"))?;
+            .context("default_output_config")?;
 
         let sample_format = config.sample_format();
         let cfg = config.config();
@@ -93,11 +94,11 @@ impl Metronome {
             cpal::SampleFormat::F32 => self.build_for::<f32>(&device, &cfg),
             cpal::SampleFormat::I16 => self.build_for::<i16>(&device, &cfg),
             cpal::SampleFormat::U16 => self.build_for::<u16>(&device, &cfg),
-            other => Err(format!("unsupported sample format: {other:?}")),
+            other => anyhow::bail!("unsupported sample format: {other:?}"),
         }
     }
 
-    fn build_for<T>(&self, device: &cpal::Device, cfg: &cpal::StreamConfig) -> Result<cpal::Stream, String>
+    fn build_for<T>(&self, device: &cpal::Device, cfg: &cpal::StreamConfig) -> Result<cpal::Stream>
     where
         T: SizedSample + FromSample<f32>,
     {
@@ -125,7 +126,17 @@ impl Metronome {
             .build_output_stream(
                 cfg,
                 move |data: &mut [T], _: &cpal::OutputCallbackInfo| {
-                    let ctl = *control.lock().unwrap();
+                    // Never panic in the audio callback: if the lock is poisoned,
+                    // emit silence for this buffer rather than crashing the thread.
+                    let ctl = match control.lock() {
+                        Ok(guard) => *guard,
+                        Err(_) => {
+                            for s in data.iter_mut() {
+                                *s = T::from_sample(0.0);
+                            }
+                            return;
+                        }
+                    };
                     let spb = (sample_rate as f64) * 60.0 / ctl.bpm.max(1) as f64;
 
                     if ctl.running && !prev_running {
@@ -183,6 +194,6 @@ impl Metronome {
                 err_fn,
                 None,
             )
-            .map_err(|e| format!("build_output_stream: {e}"))
+            .context("build_output_stream")
     }
 }

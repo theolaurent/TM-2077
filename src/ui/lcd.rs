@@ -48,7 +48,9 @@ fn tuner(p: &egui::Painter, r: Rect, app: &Tm2077App) {
     // Big note letter, upper-centre.
     let note_c = pos2(r.center().x, r.min.y + r.height() * 0.30);
     if let Some(rd) = reading {
-        let letter = &rd.name[0..1];
+        // Note names are ASCII ("A".."G", optionally "#"); take the letter
+        // without risking a panic on a bad byte boundary.
+        let letter = rd.name.get(0..1).unwrap_or(rd.name);
         p.text(note_c, Align2::CENTER_CENTER, letter, FontId::proportional(r.height() * 0.30), Palette::LCD_INK);
         if rd.name.ends_with('#') {
             glyphs::sharp(p, note_c + vec2(r.height() * 0.16, -r.height() * 0.08), r.height() * 0.07, Palette::LCD_INK);

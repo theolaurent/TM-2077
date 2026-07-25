@@ -32,11 +32,15 @@ impl NoteReading {
         let idx = (nearest as i32).rem_euclid(12) as usize;
         let octave = (nearest as i32) / 12 - 1;
 
+        // `idx` is always 0..=11 (rem_euclid), but index via `get` so this stays
+        // panic-free even if the table or index math ever changes.
+        let name = *NOTE_NAMES.get(idx)?;
+
         Some(Self {
             freq,
-            name: NOTE_NAMES[idx],
+            name,
             octave,
-            cents: cents as f32,
+            cents,
         })
     }
 

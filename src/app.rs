@@ -93,23 +93,25 @@ impl Tm2077App {
     /// the average of recent tap intervals.
     pub fn tap_tempo(&mut self, now: f64) {
         // Restart the average if the previous tap was long ago.
-        if let Some(&last) = self.tap_times.last() {
-            if now - last > 2.0 {
-                self.tap_times.clear();
-            }
+        if let Some(&last) = self.tap_times.last()
+            && now - last > 2.0
+        {
+            self.tap_times.clear();
         }
         self.tap_times.push(now);
         let n = self.tap_times.len();
         if n > 4 {
             self.tap_times.drain(0..n - 4);
         }
-        if self.tap_times.len() >= 2 {
-            let first = self.tap_times[0];
-            let last = *self.tap_times.last().unwrap();
+        // Average the recent tap intervals. `first`/`last` are only `Some` once
+        // there are at least two taps, which is exactly when an interval exists.
+        if let (Some(&first), Some(&last)) = (self.tap_times.first(), self.tap_times.last()) {
             let intervals = self.tap_times.len() as f64 - 1.0;
-            let avg = (last - first) / intervals;
-            if avg > 0.0 {
-                self.metronome.bpm = ((60.0 / avg).round() as i64).clamp(30, 300) as u32;
+            if intervals >= 1.0 {
+                let avg = (last - first) / intervals;
+                if avg > 0.0 {
+                    self.metronome.bpm = ((60.0 / avg).round() as i64).clamp(30, 300) as u32;
+                }
             }
         }
     }

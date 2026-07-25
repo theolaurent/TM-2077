@@ -16,6 +16,9 @@ serde = { version = "1", features = ["derive"] }
 cpal = "0.15"
 # Shared pitch detection for the tuner (McLeod / MPM), WASM-compatible.
 pitch-detection = "0.3"
+# Error handling. This project is strictly no-panic (see AGENTS.md): every
+# fallible operation returns `anyhow::Result` and is propagated with `?`.
+anyhow = "1"
 
 # --- Native-only (desktop) ---
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]

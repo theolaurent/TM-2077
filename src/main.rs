@@ -1,4 +1,8 @@
 #![warn(clippy::all)]
+// Strict no-panic policy (see AGENTS.md): production code must not use
+// `unwrap`/`expect`/`panic!`/`unreachable!`/`todo!`. These restriction lints
+// enforce it. Test modules (`#[cfg(test)]`) are exempt and not compiled here.
+#![warn(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
 mod app;
 mod audio;
@@ -44,16 +48,18 @@ fn main() {
     let web_options = eframe::WebOptions::default();
 
     wasm_bindgen_futures::spawn_local(async {
-        let document = web_sys::window()
-            .expect("no window")
-            .document()
-            .expect("no document");
+        let Some(document) = web_sys::window().and_then(|w| w.document()) else {
+            log::error!("boot: no window/document available");
+            return;
+        };
 
-        let canvas = document
+        let Some(canvas) = document
             .get_element_by_id("the_canvas_id")
-            .expect("`the_canvas_id` not found")
-            .dyn_into::<web_sys::HtmlCanvasElement>()
-            .expect("`the_canvas_id` is not a <canvas>");
+            .and_then(|el| el.dyn_into::<web_sys::HtmlCanvasElement>().ok())
+        else {
+            log::error!("boot: `the_canvas_id` <canvas> not found");
+            return;
+        };
 
         let start_result = eframe::WebRunner::new()
             .start(
@@ -71,7 +77,7 @@ fn main() {
                     loading.set_inner_html(
                         "<p>Failed to start TM-2077. See the developer console for details.</p>",
                     );
-                    panic!("failed to start eframe: {e:?}");
+                    log::error!("boot: failed to start eframe: {e:?}");
                 }
             }
         }

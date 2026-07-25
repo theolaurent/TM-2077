@@ -75,14 +75,16 @@ impl WebTuner {
             }
         }
 
-        let got = {
-            let slot = self.analyser.borrow();
-            if let Some(analyser) = slot.as_ref() {
-                analyser.get_float_time_domain_data(&mut self.buf);
-                true
-            } else {
-                false
+        let got = match self.analyser.try_borrow() {
+            Ok(slot) => {
+                if let Some(analyser) = slot.as_ref() {
+                    analyser.get_float_time_domain_data(&mut self.buf);
+                    true
+                } else {
+                    false
+                }
             }
+            Err(_) => false,
         };
 
         if got {
@@ -149,7 +151,9 @@ impl WebTuner {
                         return log::error!("tuner: connect failed: {e:?}");
                     }
                     let _ = ctx.resume();
-                    *analyser_slot.borrow_mut() = Some(analyser);
+                    if let Ok(mut slot) = analyser_slot.try_borrow_mut() {
+                        *slot = Some(analyser);
+                    }
                     log::info!("tuner: microphone connected");
                 }
                 Err(e) => {

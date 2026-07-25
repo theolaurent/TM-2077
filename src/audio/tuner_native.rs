@@ -3,6 +3,7 @@
 
 use std::sync::{Arc, Mutex};
 
+use anyhow::{Context as _, Result};
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use cpal::{FromSample, Sample, SizedSample};
 
@@ -63,9 +64,10 @@ impl NativeTuner {
         self.ensure_started();
 
         if let Some(tracker) = self.tracker.as_mut() {
-            let buf = {
-                let r = self.ring.lock().unwrap();
-                r.clone()
+            // Skip this frame (keep the last reading) if the lock is poisoned,
+            // rather than panicking.
+            let Ok(buf) = self.ring.lock().map(|r| r.clone()) else {
+                return;
             };
             self.reading = tracker
                 .detect(&buf)
@@ -86,18 +88,18 @@ impl NativeTuner {
                 self.tracker = Some(PitchTracker::new(sr));
                 self.stream = Some(stream);
             }
-            Err(e) => log::error!("tuner: mic init failed: {e}"),
+            Err(e) => log::error!("tuner: mic init failed: {e:#}"),
         }
     }
 
-    fn build(&self) -> Result<(cpal::Stream, u32), String> {
+    fn build(&self) -> Result<(cpal::Stream, u32)> {
         let host = cpal::default_host();
         let device = host
             .default_input_device()
-            .ok_or("no default input device")?;
+            .context("no default input device")?;
         let config = device
             .default_input_config()
-            .map_err(|e| format!("default_input_config: {e}"))?;
+            .context("default_input_config")?;
         let sr = config.sample_rate().0;
         let cfg = config.config();
 
@@ -105,12 +107,12 @@ impl NativeTuner {
             cpal::SampleFormat::F32 => self.build_for::<f32>(&device, &cfg)?,
             cpal::SampleFormat::I16 => self.build_for::<i16>(&device, &cfg)?,
             cpal::SampleFormat::U16 => self.build_for::<u16>(&device, &cfg)?,
-            other => return Err(format!("unsupported input format: {other:?}")),
+            other => anyhow::bail!("unsupported input format: {other:?}"),
         };
         Ok((stream, sr))
     }
 
-    fn build_for<T>(&self, device: &cpal::Device, cfg: &cpal::StreamConfig) -> Result<cpal::Stream, String>
+    fn build_for<T>(&self, device: &cpal::Device, cfg: &cpal::StreamConfig) -> Result<cpal::Stream>
     where
         T: SizedSample,
         f32: FromSample<T>,
@@ -121,7 +123,11 @@ impl NativeTuner {
             .build_input_stream(
                 cfg,
                 move |data: &[T], _: &cpal::InputCallbackInfo| {
-                    let mut r = ring.lock().unwrap();
+                    // Never panic in the audio callback: drop this buffer if the
+                    // lock is poisoned.
+                    let Ok(mut r) = ring.lock() else {
+                        return;
+                    };
                     for frame in data.chunks(channels) {
                         let mono: f32 =
                             frame.iter().map(|&s| f32::from_sample(s)).sum::<f32>() / channels as f32;
@@ -135,6 +141,6 @@ impl NativeTuner {
                 |e| log::error!("tuner: stream error: {e}"),
                 None,
             )
-            .map_err(|e| format!("build_input_stream: {e}"))
+            .context("build_input_stream")
     }
 }
