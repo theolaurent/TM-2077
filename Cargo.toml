@@ -1,0 +1,60 @@
+[package]
+name = "tm2077"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+eframe = { version = "0.35", default-features = false, features = [
+    "default_fonts",
+    "glow",
+    "persistence",
+] }
+egui = "0.35"
+log = "0.4"
+serde = { version = "1", features = ["derive"] }
+# cpal drives the metronome (audio output) on BOTH native and web.
+cpal = "0.15"
+# Shared pitch detection for the tuner (McLeod / MPM), WASM-compatible.
+pitch-detection = "0.3"
+
+# --- Native-only (desktop) ---
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+# Linux/desktop windowing backends for winit (not needed on web).
+eframe = { version = "0.35", default-features = false, features = ["x11", "wayland"] }
+env_logger = "0.11"
+
+# --- Web-only (wasm via trunk) ---
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+# Enable cpal's WebAudio output backend.
+cpal = { version = "0.15", features = ["wasm-bindgen"] }
+wasm-bindgen = "0.2"
+wasm-bindgen-futures = "0.4"
+js-sys = "0.3"
+console_error_panic_hook = "0.1"
+# web-sys is needed ONLY for the web tuner's mic capture (cpal has no released
+# WASM input backend), so only the getUserMedia + AnalyserNode surface is enabled.
+web-sys = { version = "0.3", features = [
+    "Window",
+    "Document",
+    "Element",
+    "HtmlElement",
+    "HtmlCanvasElement",
+    "Navigator",
+    "MediaDevices",
+    "MediaStream",
+    "MediaStreamConstraints",
+    "MediaStreamAudioSourceNode",
+    "AudioContext",
+    "AudioContextState",
+    "BaseAudioContext",
+    "AudioNode",
+    "AnalyserNode",
+] }
+
+[profile.release]
+opt-level = 2
+lto = "thin"
+
+# Slightly optimize deps in dev so audio/DSP isn't sluggish.
+[profile.dev.package."*"]
+opt-level = 2

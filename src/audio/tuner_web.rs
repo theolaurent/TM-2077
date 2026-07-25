@@ -1,0 +1,161 @@
+//! Web tuner backend: `getUserMedia` → `MediaStreamAudioSourceNode` →
+//! `AnalyserNode`. Each `poll()` reads the analyser's time-domain buffer and
+//! runs it through the shared pitch detector. cpal has no released WASM input
+//! backend, so this uses web-sys directly.
+
+use std::cell::RefCell;
+use std::rc::Rc;
+
+use wasm_bindgen::JsCast;
+use wasm_bindgen_futures::{JsFuture, spawn_local};
+use web_sys::{AnalyserNode, AudioContext, MediaStream, MediaStreamConstraints};
+
+use crate::audio::pitch::{PitchTracker, WINDOW};
+use crate::note::NoteReading;
+
+pub struct WebTuner {
+    enabled: bool,
+    a4: f32,
+    reading: Option<NoteReading>,
+    analyser: Rc<RefCell<Option<AnalyserNode>>>,
+    ctx: Option<AudioContext>,
+    tracker: Option<PitchTracker>,
+    buf: Vec<f32>,
+    requested: bool,
+}
+
+impl WebTuner {
+    pub fn new() -> Self {
+        Self {
+            enabled: false,
+            a4: 440.0,
+            reading: None,
+            analyser: Rc::new(RefCell::new(None)),
+            ctx: None,
+            tracker: None,
+            buf: vec![0.0; WINDOW],
+            requested: false,
+        }
+    }
+
+    pub fn set_enabled(&mut self, on: bool) {
+        self.enabled = on;
+        if !on {
+            self.reading = None;
+        }
+    }
+
+    pub fn set_a4(&mut self, a4: f32) {
+        self.a4 = a4;
+    }
+
+    pub fn reading(&self) -> Option<NoteReading> {
+        self.reading
+    }
+
+    pub fn on_user_gesture(&mut self) {
+        if self.enabled {
+            self.request_mic();
+        }
+        if let Some(ctx) = &self.ctx {
+            let _ = ctx.resume();
+        }
+    }
+
+    pub fn poll(&mut self) {
+        if !self.enabled {
+            self.reading = None;
+            return;
+        }
+
+        // Build the tracker once the AudioContext's sample rate is known.
+        if self.tracker.is_none() {
+            if let Some(ctx) = &self.ctx {
+                self.tracker = Some(PitchTracker::new(ctx.sample_rate() as u32));
+            }
+        }
+
+        let got = {
+            let slot = self.analyser.borrow();
+            if let Some(analyser) = slot.as_ref() {
+                analyser.get_float_time_domain_data(&mut self.buf);
+                true
+            } else {
+                false
+            }
+        };
+
+        if got {
+            if let Some(tracker) = self.tracker.as_mut() {
+                self.reading = tracker
+                    .detect(&self.buf)
+                    .and_then(|f| NoteReading::from_freq(f, self.a4));
+            }
+        }
+    }
+
+    fn request_mic(&mut self) {
+        if self.requested {
+            return;
+        }
+        self.requested = true;
+
+        let ctx = match AudioContext::new() {
+            Ok(c) => c,
+            Err(e) => {
+                log::error!("tuner: AudioContext failed: {e:?}");
+                self.requested = false;
+                return;
+            }
+        };
+        self.ctx = Some(ctx.clone());
+
+        let Some(window) = web_sys::window() else {
+            return;
+        };
+        let media_devices = match window.navigator().media_devices() {
+            Ok(m) => m,
+            Err(e) => {
+                log::error!("tuner: media_devices unavailable: {e:?}");
+                return;
+            }
+        };
+
+        let constraints = MediaStreamConstraints::new();
+        constraints.set_audio_bool(true);
+        let promise = match media_devices.get_user_media_with_constraints(&constraints) {
+            Ok(p) => p,
+            Err(e) => {
+                log::error!("tuner: getUserMedia call failed: {e:?}");
+                return;
+            }
+        };
+
+        let analyser_slot = self.analyser.clone();
+        spawn_local(async move {
+            match JsFuture::from(promise).await {
+                Ok(stream_val) => {
+                    let stream: MediaStream = stream_val.unchecked_into();
+                    let source = match ctx.create_media_stream_source(&stream) {
+                        Ok(s) => s,
+                        Err(e) => return log::error!("tuner: source node failed: {e:?}"),
+                    };
+                    let analyser = match ctx.create_analyser() {
+                        Ok(a) => a,
+                        Err(e) => return log::error!("tuner: analyser failed: {e:?}"),
+                    };
+                    analyser.set_fft_size(WINDOW as u32);
+                    if let Err(e) = source.connect_with_audio_node(&analyser) {
+                        return log::error!("tuner: connect failed: {e:?}");
+                    }
+                    let _ = ctx.resume();
+                    *analyser_slot.borrow_mut() = Some(analyser);
+                    log::info!("tuner: microphone connected");
+                }
+                Err(e) => {
+                    log::warn!("tuner: microphone permission denied / unavailable: {e:?}");
+                }
+            }
+        });
+    }
+}
