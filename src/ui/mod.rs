@@ -226,22 +226,50 @@ pub(crate) fn fill_gradient_v(p: &egui::Painter, rect: Rect, top: Color32, botto
 }
 
 pub(crate) fn fill_gradient_v_cr(p: &egui::Painter, rect: Rect, top: Color32, bottom: Color32, cr: CornerRadius) {
-    const STEPS: usize = 24;
-    for i in 0..STEPS {
-        let t0 = i as f32 / STEPS as f32;
-        let t1 = (i + 1) as f32 / STEPS as f32;
-        let strip = Rect::from_min_max(
-            pos2(rect.min.x, rect.min.y + rect.height() * t0),
-            pos2(rect.max.x, rect.min.y + rect.height() * t1),
-        );
-        let scr = if i == 0 {
-            CornerRadius { nw: cr.nw, ne: cr.ne, sw: 0, se: 0 }
-        } else if i == STEPS - 1 {
-            CornerRadius { nw: 0, ne: 0, sw: cr.sw, se: cr.se }
-        } else {
-            CornerRadius::same(0)
-        };
-        p.rect_filled(strip, scr, lerp_color(top, bottom, (t0 + t1) * 0.5));
+    use egui::epaint::{Mesh, Vertex, WHITE_UV};
+    // Fill a rounded-rect mesh with a smooth vertical gradient (per-vertex
+    // colour). A triangle fan from the centre fills the convex rounded shape, so
+    // the fill's corners match the rounded outline exactly — no square nubs.
+    let h = rect.height().max(1.0);
+    let col = |y: f32| lerp_color(top, bottom, ((y - rect.min.y) / h).clamp(0.0, 1.0));
+    let ring = rounded_rect_ring(rect, cr);
+    let mut mesh = Mesh::default();
+    let center = rect.center();
+    mesh.vertices.push(Vertex { pos: center, uv: WHITE_UV, color: col(center.y) });
+    for &pt in &ring {
+        mesh.vertices.push(Vertex { pos: pt, uv: WHITE_UV, color: col(pt.y) });
+    }
+    let n = ring.len() as u32;
+    for i in 0..n {
+        mesh.indices.extend_from_slice(&[0, 1 + i, 1 + (i + 1) % n]);
+    }
+    p.add(mesh);
+}
+
+/// Perimeter points of a rounded rectangle, clockwise (for meshing).
+fn rounded_rect_ring(rect: Rect, cr: CornerRadius) -> Vec<Pos2> {
+    use std::f32::consts::{FRAC_PI_2, PI};
+    let max_r = (rect.width().min(rect.height()) * 0.5).max(0.0);
+    let (nw, ne, se, sw) = (
+        (cr.nw as f32).min(max_r),
+        (cr.ne as f32).min(max_r),
+        (cr.se as f32).min(max_r),
+        (cr.sw as f32).min(max_r),
+    );
+    let mut pts = Vec::new();
+    arc(rect.min.x + nw, rect.min.y + nw, nw, PI, PI + FRAC_PI_2, &mut pts);
+    arc(rect.max.x - ne, rect.min.y + ne, ne, PI + FRAC_PI_2, 2.0 * PI, &mut pts);
+    arc(rect.max.x - se, rect.max.y - se, se, 0.0, FRAC_PI_2, &mut pts);
+    arc(rect.min.x + sw, rect.max.y - sw, sw, FRAC_PI_2, PI, &mut pts);
+    pts
+}
+
+/// Append points along a quarter-circle arc to `out`.
+fn arc(cx: f32, cy: f32, r: f32, a0: f32, a1: f32, out: &mut Vec<Pos2>) {
+    const SEG: usize = 5;
+    for i in 0..=SEG {
+        let a = a0 + (a1 - a0) * (i as f32 / SEG as f32);
+        out.push(pos2(cx + r * a.cos(), cy + r * a.sin()));
     }
 }
 

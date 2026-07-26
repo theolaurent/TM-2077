@@ -41,7 +41,6 @@ pub struct Palette {
     pub lcd_bg: Color32,
     pub lcd_bg_edge: Color32,
     pub lcd_ink: Color32,
-    pub lcd_ink_dim: Color32,
     pub lcd_frame: Color32,
     pub bezel: Color32,
 
@@ -79,7 +78,6 @@ impl Palette {
             lcd_bg: Color32::from_rgb(0xf6, 0xac, 0x1e),
             lcd_bg_edge: Color32::from_rgb(0xe2, 0x93, 0x10),
             lcd_ink: Color32::from_rgb(0x2b, 0x1c, 0x04),
-            lcd_ink_dim: Color32::from_rgba_premultiplied(0x2b, 0x1c, 0x04, 0x24),
             lcd_frame: Color32::from_rgb(0x53, 0x56, 0x5a),
             bezel: Color32::from_rgb(0x08, 0x09, 0x0a),
 

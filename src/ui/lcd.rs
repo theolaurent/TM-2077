@@ -52,7 +52,7 @@ fn tuner(p: &egui::Painter, r: Rect, app: &Tm2077App) {
     // digits, so this is a fixed 3-cell field, symmetric with BPM.
     let hz_rect = shrunk(rel_rect(r, 0.03, 0.15, 0.26, 0.39), SEG_SCALE);
     let a4 = app.tuner.a4.round() as u32;
-    seg::number(p, hz_rect, a4, 3, t.lcd_ink, t.lcd_ink_dim);
+    seg::number(p, hz_rect, a4, 3, t.lcd_ink);
     p.text(
         pos2(hz_rect.max.x + 6.0, hz_rect.center().y),
         Align2::LEFT_CENTER,
@@ -72,8 +72,6 @@ fn tuner(p: &egui::Painter, r: Rect, app: &Tm2077App) {
         if rd.name.ends_with('#') {
             glyphs::sharp(p, note_c + vec2(note_size * 0.55, -note_size * 0.28), note_size * 0.23, t.lcd_ink);
         }
-    } else {
-        p.text(note_c, Align2::CENTER_CENTER, "-", FontId::proportional(note_size), t.lcd_ink_dim);
     }
 }
 
@@ -165,29 +163,31 @@ fn needle_meter(p: &egui::Painter, r: Rect, app: &Tm2077App) {
     let top_ang = if tuner_on { tuner_ang } else { metro_ang };
     let bottom_ang = if metro_on { metro_ang } else { tuner_ang };
 
-    let col = if tuner_on || metro_on { t.lcd_ink } else { t.lcd_ink_dim };
-    // Radial split: ~30% of the visible needle for the metronome (inner), ~70%
-    // for the tuner (outer). The visible needle starts near s=0.54 (pivot is
-    // off-screen), so 0.68 gives the 30/70 division.
-    const SPLIT: f32 = 0.68;
-    let split_r = radius * SPLIT;
-    // Small gaps: between the needle tip and the arc, and — only when both
-    // instruments drive the needle — between the two bands at the split.
-    let tip_gap = radius * 0.04;
-    let split_gap = if tuner_on && metro_on { radius * 0.007 } else { 0.0 };
-    // Bottom band (pivot → below the split): metronome.
-    p.line_segment(
-        [pivot, pivot + dir(bottom_ang) * (split_r - split_gap)],
-        Stroke::new(3.6, col),
-    );
-    // Top band (above the split → just short of the arc): tuner.
-    p.line_segment(
-        [
-            pivot + dir(top_ang) * (split_r + split_gap),
-            pivot + dir(top_ang) * (radius - tip_gap),
-        ],
-        Stroke::new(3.6, col),
-    );
+    // Only draw the needle when an instrument is active (no idle resting line).
+    if tuner_on || metro_on {
+        // Radial split: ~30% of the visible needle for the metronome (inner),
+        // ~70% for the tuner (outer). The visible needle starts near s=0.54
+        // (pivot is off-screen), so 0.68 gives the 30/70 division.
+        const SPLIT: f32 = 0.68;
+        let split_r = radius * SPLIT;
+        // Small gaps: between the needle tip and the arc, and — only when both
+        // instruments drive the needle — between the two bands at the split.
+        let tip_gap = radius * 0.04;
+        let split_gap = if tuner_on && metro_on { radius * 0.007 } else { 0.0 };
+        // Bottom band (pivot → below the split): metronome.
+        p.line_segment(
+            [pivot, pivot + dir(bottom_ang) * (split_r - split_gap)],
+            Stroke::new(3.6, t.lcd_ink),
+        );
+        // Top band (above the split → just short of the arc): tuner.
+        p.line_segment(
+            [
+                pivot + dir(top_ang) * (split_r + split_gap),
+                pivot + dir(top_ang) * (radius - tip_gap),
+            ],
+            Stroke::new(3.6, t.lcd_ink),
+        );
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -200,7 +200,7 @@ fn metronome(p: &egui::Painter, r: Rect, app: &Tm2077App) {
     // Tempo number (7-seg) with a "BPM" label — same gap / middle-line
     // alignment as the other readouts.
     let bpm_rect = shrunk(rel_rect(r, 0.74, 0.15, 0.97, 0.39), SEG_SCALE);
-    seg::number(p, bpm_rect, m.bpm, 3, t.lcd_ink, t.lcd_ink_dim);
+    seg::number(p, bpm_rect, m.bpm, 3, t.lcd_ink);
     p.text(
         pos2(bpm_rect.min.x - 6.0, bpm_rect.center().y),
         Align2::RIGHT_CENTER,
@@ -217,7 +217,7 @@ fn metronome(p: &egui::Painter, r: Rect, app: &Tm2077App) {
         pos2(bpm_rect.max.x - beat_w, bpm_rect.max.y + r.height() * 0.03),
         vec2(beat_w, beat_h),
     );
-    seg::number(p, beat_rect, m.beats_per_bar, 2, t.lcd_ink, t.lcd_ink_dim);
+    seg::number(p, beat_rect, m.beats_per_bar, 2, t.lcd_ink);
     p.text(
         pos2(beat_rect.min.x - 6.0, beat_rect.center().y),
         Align2::RIGHT_CENTER,

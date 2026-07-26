@@ -25,9 +25,9 @@ const DIGITS: [[bool; 7]; 10] = [
     [true, true, true, true, false, true, true],     // 9
 ];
 
-/// Draw a single digit (or, for `None`, only the faint ghost segments) filling
-/// `rect`. `ink` draws lit segments; `ghost` draws unlit ones (LCD look).
-pub fn digit(p: &egui::Painter, rect: Rect, d: Option<u8>, ink: Color32, ghost: Color32) {
+/// Draw a single digit (or nothing, for `None`) filling `rect`. Only lit
+/// segments are drawn, in `ink`.
+pub fn digit(p: &egui::Painter, rect: Rect, d: Option<u8>, ink: Color32) {
     let on = d.and_then(|d| DIGITS.get(d as usize).copied()).unwrap_or([false; 7]);
     let (x0, y0, w, h) = (rect.min.x, rect.min.y, rect.width(), rect.height());
     let th = w * 0.17;
@@ -46,16 +46,18 @@ pub fn digit(p: &egui::Painter, rect: Rect, d: Option<u8>, ink: Color32, ghost: 
     ];
 
     for (i, (c, horizontal)) in positions.iter().enumerate() {
+        if !on[i] {
+            continue;
+        }
         let len = if *horizontal { lh } else { lv };
         let poly = if *horizontal { hseg(*c, len, th) } else { vseg(*c, len, th) };
-        let color = if on[i] { ink } else { ghost };
-        p.add(Shape::convex_polygon(poly, color, Stroke::NONE));
+        p.add(Shape::convex_polygon(poly, ink, Stroke::NONE));
     }
 }
 
 /// Draw a right-aligned integer within `rect` using `count` digit cells.
-/// Leading positions are blank (only ghost segments).
-pub fn number(p: &egui::Painter, rect: Rect, value: u32, count: usize, ink: Color32, ghost: Color32) {
+/// Leading positions are blank.
+pub fn number(p: &egui::Painter, rect: Rect, value: u32, count: usize, ink: Color32) {
     let gap = rect.width() * 0.06 / count as f32;
     let cell_w = (rect.width() - gap * (count as f32 - 1.0)) / count as f32;
 
@@ -80,7 +82,7 @@ pub fn number(p: &egui::Painter, rect: Rect, value: u32, count: usize, ink: Colo
             pos2(rect.min.x + i as f32 * (cell_w + gap), rect.min.y),
             vec2(cell_w, rect.height()),
         );
-        digit(p, cell, digit_at(i), ink, ghost);
+        digit(p, cell, digit_at(i), ink);
     }
 }
 
