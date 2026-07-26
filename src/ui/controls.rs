@@ -1,10 +1,10 @@
 //! The hardware controls around the LCD: TUNER/METRONOME ON pills, CALIB·NOTE
-//! and BEAT/TEMPO rockers, SOUND, START/STOP, the red TAP TEMPO button, plus the
-//! speaker grille and wordmark. Handles all interaction.
+//! and BEAT/TEMPO rockers, the red TAP TEMPO button, and the wordmark. Handles
+//! all interaction.
 
-use egui::{Align2, Color32, FontId, Rect, pos2, vec2};
+use egui::{Align2, FontId, Rect, pos2};
 
-use super::{button, label, pill, rel_rect, rocker, round_button};
+use super::{label, pill, rel_rect, rocker, round_button};
 use crate::app::Tm2077App;
 use crate::theme::Palette;
 
@@ -31,25 +31,6 @@ fn left_column(ui: &mut egui::Ui, p: &egui::Painter, d: Rect, app: &mut Tm2077Ap
     }
     if dn.clicked() {
         app.tuner.a4 = (app.tuner.a4 - 1.0).clamp(410.0, 480.0);
-    }
-
-    // SOUND: toggles a continuous A4 reference tone for tuning by ear.
-    label(p, pos2(d.min.x + d.width() * 0.115, d.min.y + d.height() * 0.53), Align2::CENTER_CENTER, "SOUND", 10.0, false);
-    let sound = rel_rect(d, 0.045, 0.56, 0.185, 0.64);
-    if button(ui, p, sound, "SOUND", app.sound_on).clicked() {
-        app.sound_on = !app.sound_on;
-    }
-
-    // MIC label + dots (decorative).
-    label(p, pos2(d.min.x + d.width() * 0.10, d.min.y + d.height() * 0.80), Align2::CENTER_CENTER, "MIC", 10.0, true);
-    for row in 0..2 {
-        for col in 0..3 {
-            let c = pos2(
-                d.min.x + d.width() * 0.075 + col as f32 * 6.0,
-                d.min.y + d.height() * 0.85 + row as f32 * 6.0,
-            );
-            p.circle_filled(c, 1.3, Palette::BODY_LABEL_DIM);
-        }
     }
 }
 
@@ -80,19 +61,9 @@ fn right_column(ui: &mut egui::Ui, p: &egui::Painter, d: Rect, app: &mut Tm2077A
     if td.clicked() {
         app.metronome.bpm = app.metronome.bpm.saturating_sub(1).max(30);
     }
-
-    // START / STOP.
-    let start = rel_rect(d, 0.805, 0.55, 0.965, 0.64);
-    if button(ui, p, start, if app.metronome.running { "STOP" } else { "START" }, app.metronome.running).clicked() {
-        app.metronome.running = !app.metronome.running;
-    }
 }
 
 fn centre(ui: &mut egui::Ui, p: &egui::Painter, d: Rect, app: &mut Tm2077App) {
-    // Speaker grille (dot grid) lower-centre-left.
-    let grille_c = pos2(d.min.x + d.width() * 0.42, d.min.y + d.height() * 0.80);
-    speaker_grille(p, grille_c, d.height() * 0.11);
-
     // TAP TEMPO (red round button).
     let tap_c = pos2(d.min.x + d.width() * 0.66, d.min.y + d.height() * 0.79);
     label(p, pos2(tap_c.x, tap_c.y - d.height() * 0.135), Align2::CENTER_CENTER, "TAP TEMPO", 10.0, false);
@@ -117,18 +88,4 @@ fn centre(ui: &mut egui::Ui, p: &egui::Painter, d: Rect, app: &mut Tm2077App) {
         FontId::proportional(10.0),
         Palette::BODY_LABEL_DIM,
     );
-}
-
-fn speaker_grille(p: &egui::Painter, c: egui::Pos2, radius: f32) {
-    let step = radius * 0.24;
-    let n = (radius / step) as i32;
-    for gy in -n..=n {
-        for gx in -n..=n {
-            let off = vec2(gx as f32 * step, gy as f32 * step);
-            if off.length() <= radius {
-                p.circle_filled(c + off, 1.4, Color32::from_black_alpha(150));
-            }
-        }
-    }
-    p.circle_stroke(c, radius + step, egui::Stroke::new(1.0, Palette::BODY_EDGE_LO));
 }

@@ -112,27 +112,6 @@ pub(crate) fn rel_rect(r: Rect, x0: f32, y0: f32, x1: f32, y1: f32) -> Rect {
 // Shared widgets
 // ---------------------------------------------------------------------------
 
-/// A rounded rubber push-button. Returns the interaction response.
-pub(crate) fn button(ui: &mut Ui, p: &egui::Painter, rect: Rect, label: &str, active: bool) -> Response {
-    let resp = interact(ui, rect, label);
-    let (top, bot) = if active {
-        (Palette::BTN_ON, crate::theme::Palette::LCD_BG_EDGE)
-    } else if resp.is_pointer_button_down_on() {
-        (Palette::BTN_LO, Palette::BTN_LO)
-    } else if resp.hovered() {
-        (Palette::BTN_HI, Palette::BTN)
-    } else {
-        (Palette::BTN, Palette::BTN_LO)
-    };
-    fill_gradient_v(p, rect, top, bot, 7);
-    p.rect_stroke(rect, CornerRadius::same(7), Stroke::new(1.0, Palette::BODY_EDGE_LO), StrokeKind::Inside);
-    if !label.is_empty() {
-        let col = if active { Palette::BEZEL } else { Palette::BTN_LABEL };
-        p.text(rect.center(), Align2::CENTER_CENTER, label, FontId::proportional(13.0), col);
-    }
-    resp
-}
-
 /// A pill (fully-rounded) toggle button with an indicator dot when `on`.
 pub(crate) fn pill(ui: &mut Ui, p: &egui::Painter, rect: Rect, on: bool) -> Response {
     let resp = interact(ui, rect, "pill");

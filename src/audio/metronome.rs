@@ -14,8 +14,6 @@ struct Control {
     bpm: u32,
     beats: u32,
     running: bool,
-    /// Continuous reference tone frequency (Hz), or `None` when silent.
-    tone: Option<f32>,
 }
 
 pub struct Metronome {
@@ -36,7 +34,6 @@ impl Metronome {
                 bpm: 120,
                 beats: 4,
                 running: false,
-                tone: None,
             })),
             beat_count: Arc::new(AtomicU32::new(0)),
             stream: None,
@@ -50,13 +47,6 @@ impl Metronome {
             c.bpm = bpm.clamp(20, 400);
             c.beats = beats.max(1);
             c.running = running;
-        }
-    }
-
-    /// Set (or clear) the continuous reference tone.
-    pub fn set_tone(&self, freq: Option<f32>) {
-        if let Ok(mut c) = self.control.lock() {
-            c.tone = freq;
         }
     }
 
@@ -120,16 +110,9 @@ impl Metronome {
         let mut env: f32 = 0.0;
         let mut phase: f32 = 0.0;
         let mut freq: f32 = 0.0;
-        // Continuous reference-tone state (with a smoothed gain to avoid pops).
-        let mut tone_phase: f32 = 0.0;
-        let mut tone_gain: f32 = 0.0;
-        // Last active tone frequency, so the gain fade-out after SOUND is turned
-        // off keeps the calibrated pitch instead of snapping to 440.
-        let mut tone_freq: f32 = 440.0;
 
         let err_fn = |e| log::error!("metronome: stream error: {e}");
         let decay_per_sample = 1.0 / (0.035 * sample_rate); // ~35 ms click
-        let gain_step = 1.0 / (0.01 * sample_rate); // ~10 ms attack/release
 
         device
             .build_output_stream(
@@ -178,25 +161,7 @@ impl Metronome {
                             0.0
                         };
 
-                        // Continuous reference tone, gain-ramped in/out.
-                        let target_gain = if ctl.tone.is_some() { 0.18 } else { 0.0 };
-                        tone_gain += (target_gain - tone_gain).clamp(-gain_step, gain_step);
-                        let tone = if let Some(tf) = ctl.tone {
-                            tone_freq = tf; // remember for the fade-out
-                            tone_phase += tf / sample_rate;
-                            (tone_phase * std::f32::consts::TAU).sin() * tone_gain
-                        } else if tone_gain > 0.0 {
-                            tone_phase += tone_freq / sample_rate;
-                            (tone_phase * std::f32::consts::TAU).sin() * tone_gain
-                        } else {
-                            0.0
-                        };
-
-                        if tone_phase > 1.0 {
-                            tone_phase -= tone_phase.floor();
-                        }
-
-                        let out = T::from_sample(click + tone);
+                        let out = T::from_sample(click);
                         for ch in frame.iter_mut() {
                             *ch = out;
                         }

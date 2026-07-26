@@ -46,8 +46,6 @@ impl Default for Settings {
 pub struct Tm2077App {
     /// Whether the tuner is listening (the TUNER ON toggle).
     pub tuner_on: bool,
-    /// Whether the reference tone (SOUND) is playing.
-    pub sound_on: bool,
     pub tuner: TunerState,
     pub metronome: MetronomeState,
     audio: AudioEngine,
@@ -65,7 +63,6 @@ impl Tm2077App {
 
         Self {
             tuner_on: s.tuner_on,
-            sound_on: false,
             tuner: TunerState {
                 a4: s.a4,
                 reading: None,
@@ -163,8 +160,6 @@ impl eframe::App for Tm2077App {
         );
         self.audio.tuner_set_enabled(self.tuner_on);
         self.audio.tuner_set_a4(self.tuner.a4);
-        self.audio
-            .set_reference_tone(self.sound_on.then_some(self.tuner.a4));
 
         // Now that this frame's settings are live, act on any user gesture — so a
         // click that just enabled the tuner unlocks audio and prompts for the mic.

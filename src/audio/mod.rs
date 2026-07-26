@@ -34,11 +34,6 @@ impl AudioEngine {
         self.metronome.beat_count()
     }
 
-    /// Play (or stop) a continuous reference tone through the output stream.
-    pub fn set_reference_tone(&self, freq: Option<f32>) {
-        self.metronome.set_tone(freq);
-    }
-
     // --- Tuner ---
     pub fn tuner_set_enabled(&mut self, on: bool) {
         self.tuner.set_enabled(on);
