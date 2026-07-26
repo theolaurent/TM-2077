@@ -6,7 +6,7 @@ use egui::{Align2, FontId, Rect, pos2};
 
 use super::{glyphs, icon_button, label, pill, rel_rect, rocker, round_button};
 use crate::app::Tm2077App;
-use crate::theme::Palette;
+use crate::theme;
 
 pub fn draw(ui: &mut egui::Ui, p: &egui::Painter, d: Rect, _lcd: Rect, app: &mut Tm2077App) {
     left_column(ui, p, d, app);
@@ -64,19 +64,21 @@ fn right_column(ui: &mut egui::Ui, p: &egui::Painter, d: Rect, app: &mut Tm2077A
 
     // Settings gear — a push-button in the bottom-right corner that opens the
     // settings popup.
+    let t = theme::palette(p);
     let gear_rect = rel_rect(d, 0.89, 0.85, 0.965, 0.95);
     let resp = icon_button(ui, p, gear_rect, "settings");
-    glyphs::gear(p, gear_rect.center(), gear_rect.height() * 0.34, Palette::BTN_LABEL);
+    glyphs::gear(p, gear_rect.center(), gear_rect.height() * 0.34, t.btn_label);
     if resp.clicked() {
         app.settings_open = !app.settings_open;
     }
 }
 
 fn centre(ui: &mut egui::Ui, p: &egui::Painter, d: Rect, app: &mut Tm2077App) {
+    let t = theme::palette(p);
     // TAP TEMPO (red round button).
     let tap_c = pos2(d.min.x + d.width() * 0.66, d.min.y + d.height() * 0.79);
     label(p, pos2(tap_c.x, tap_c.y - d.height() * 0.135), Align2::CENTER_CENTER, "TAP TEMPO", 10.0, false);
-    let tap = round_button(ui, p, tap_c, d.height() * 0.085, "", Palette::TAP, Palette::TAP_HI, Palette::TAP_LO);
+    let tap = round_button(ui, p, tap_c, d.height() * 0.085, "", t.tap, t.tap_hi, t.tap_lo);
     if tap.clicked() {
         let now = ui.input(|i| i.time);
         app.tap_tempo(now);
@@ -88,13 +90,13 @@ fn centre(ui: &mut egui::Ui, p: &egui::Painter, d: Rect, app: &mut Tm2077App) {
         Align2::LEFT_CENTER,
         "TM-2077",
         FontId::proportional(22.0),
-        Palette::BODY_LABEL,
+        t.body_label,
     );
     p.text(
         pos2(d.min.x + d.width() * 0.235, d.min.y + d.height() * 0.955),
         Align2::LEFT_CENTER,
         "COMBO TUNER · METRONOME",
         FontId::proportional(10.0),
-        Palette::BODY_LABEL_DIM,
+        t.body_label_dim,
     );
 }

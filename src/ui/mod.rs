@@ -12,7 +12,7 @@ use egui::{
 };
 
 use crate::app::Tm2077App;
-use crate::theme::Palette;
+use crate::theme;
 
 /// Aspect ratio (w:h) of the device body, close to the real TM-60.
 const ASPECT: f32 = 1.62;
@@ -39,16 +39,17 @@ pub fn draw_device(ui: &mut Ui, app: &mut Tm2077App) {
 // Body
 // ---------------------------------------------------------------------------
 fn paint_body(p: &egui::Painter, rect: Rect) {
+    let t = theme::palette(p);
     p.rect_filled(
         rect.translate(vec2(0.0, 5.0)),
         CornerRadius::same(26),
         Color32::from_black_alpha(140),
     );
-    fill_gradient_v(p, rect, Palette::BODY_EDGE_HI, Palette::BODY, 26);
+    fill_gradient_v(p, rect, t.body_edge_hi, t.body, 26);
     p.rect_stroke(
         rect,
         CornerRadius::same(26),
-        Stroke::new(1.5, Palette::BODY_EDGE_LO),
+        Stroke::new(1.5, t.body_edge_lo),
         StrokeKind::Inside,
     );
     // Subtle moulded highlight along the top edge.
@@ -58,6 +59,7 @@ fn paint_body(p: &egui::Painter, rect: Rect) {
 
 /// The three tuning LEDs (♭ flat · in-tune · ♯ sharp) above the LCD.
 fn leds(p: &egui::Painter, d: Rect, app: &Tm2077App) {
+    let t = theme::palette(p);
     let reading = if app.tuner_on { app.tuner.reading } else { None };
     let cents = reading.map(|r| r.cents);
     let flat = matches!(cents, Some(c) if c < -4.0);
@@ -69,12 +71,12 @@ fn leds(p: &egui::Painter, d: Rect, app: &Tm2077App) {
     let spacing = d.width() * 0.075;
 
     // Accidental glyphs flanking the outer LEDs.
-    glyphs::flat(p, pos2(cx - spacing * 1.7, y), 8.0, Palette::BODY_LABEL);
-    glyphs::sharp(p, pos2(cx + spacing * 1.7, y), 8.0, Palette::BODY_LABEL);
+    glyphs::flat(p, pos2(cx - spacing * 1.7, y), 8.0, t.body_label);
+    glyphs::sharp(p, pos2(cx + spacing * 1.7, y), 8.0, t.body_label);
 
-    led(p, pos2(cx - spacing, y), Palette::LED_RED_ON, Palette::LED_RED_OFF, flat);
-    led(p, pos2(cx, y), Palette::LED_GREEN_ON, Palette::LED_GREEN_OFF, intune);
-    led(p, pos2(cx + spacing, y), Palette::LED_RED_ON, Palette::LED_RED_OFF, sharp);
+    led(p, pos2(cx - spacing, y), t.led_red_on, t.led_red_off, flat);
+    led(p, pos2(cx, y), t.led_green_on, t.led_green_off, intune);
+    led(p, pos2(cx + spacing, y), t.led_red_on, t.led_red_off, sharp);
 }
 
 fn led(p: &egui::Painter, c: Pos2, on: Color32, off: Color32, lit: bool) {
@@ -116,35 +118,37 @@ pub(crate) fn rel_rect(r: Rect, x0: f32, y0: f32, x1: f32, y1: f32) -> Rect {
 /// label; the caller paints an icon over the returned rect. Same look as the
 /// rocker buttons. Returns the interaction response.
 pub(crate) fn icon_button(ui: &mut Ui, p: &egui::Painter, rect: Rect, tag: &str) -> Response {
+    let t = theme::palette(p);
     let resp = interact(ui, rect, tag);
     let (top, bot) = if resp.is_pointer_button_down_on() {
-        (Palette::BTN_LO, Palette::BTN_LO)
+        (t.btn_lo, t.btn_lo)
     } else if resp.hovered() {
-        (Palette::BTN_HI, Palette::BTN)
+        (t.btn_hi, t.btn)
     } else {
-        (Palette::BTN, Palette::BTN_LO)
+        (t.btn, t.btn_lo)
     };
     fill_gradient_v(p, rect, top, bot, 6);
-    p.rect_stroke(rect, CornerRadius::same(6), Stroke::new(1.0, Palette::BODY_EDGE_LO), StrokeKind::Inside);
+    p.rect_stroke(rect, CornerRadius::same(6), Stroke::new(1.0, t.body_edge_lo), StrokeKind::Inside);
     resp
 }
 
 /// A pill (fully-rounded) toggle button with an indicator dot when `on`.
 pub(crate) fn pill(ui: &mut Ui, p: &egui::Painter, rect: Rect, on: bool) -> Response {
+    let t = theme::palette(p);
     let resp = interact(ui, rect, "pill");
     let r = (rect.height() * 0.5) as u8;
     let (top, bot) = if resp.is_pointer_button_down_on() {
-        (Palette::BTN_LO, Palette::BTN_LO)
+        (t.btn_lo, t.btn_lo)
     } else if resp.hovered() {
-        (Palette::BTN_HI, Palette::BTN)
+        (t.btn_hi, t.btn)
     } else {
-        (Palette::BTN, Palette::BTN_LO)
+        (t.btn, t.btn_lo)
     };
     fill_gradient_v_cr(p, rect, top, bot, CornerRadius::same(r));
-    p.rect_stroke(rect, CornerRadius::same(r), Stroke::new(1.0, Palette::BODY_EDGE_LO), StrokeKind::Inside);
+    p.rect_stroke(rect, CornerRadius::same(r), Stroke::new(1.0, t.body_edge_lo), StrokeKind::Inside);
     // Indicator dot near the left, amber when on.
     let dot = pos2(rect.left() + rect.height() * 0.55, rect.center().y);
-    let col = if on { Palette::BTN_ON } else { Palette::BTN_LO };
+    let col = if on { t.btn_on } else { t.btn_lo };
     if on {
         p.circle_filled(dot, rect.height() * 0.28, Color32::from_rgba_unmultiplied(0xf6, 0xac, 0x1e, 60));
     }
@@ -179,28 +183,30 @@ pub(crate) fn round_button(
 
 /// A vertical rocker: two stacked arrow buttons. Returns (up, down) responses.
 pub(crate) fn rocker(ui: &mut Ui, p: &egui::Painter, rect: Rect, id: &str) -> (Response, Response) {
+    let t = theme::palette(p);
     let up_rect = Rect::from_min_max(rect.min, pos2(rect.max.x, rect.center().y - 1.0));
     let dn_rect = Rect::from_min_max(pos2(rect.min.x, rect.center().y + 1.0), rect.max);
     let up = interact(ui, up_rect, &format!("{id}-up"));
     let dn = interact(ui, dn_rect, &format!("{id}-dn"));
     for (r, resp, up_arrow) in [(up_rect, &up, true), (dn_rect, &dn, false)] {
         let (top, bot) = if resp.is_pointer_button_down_on() {
-            (Palette::BTN_LO, Palette::BTN_LO)
+            (t.btn_lo, t.btn_lo)
         } else if resp.hovered() {
-            (Palette::BTN_HI, Palette::BTN)
+            (t.btn_hi, t.btn)
         } else {
-            (Palette::BTN, Palette::BTN_LO)
+            (t.btn, t.btn_lo)
         };
         fill_gradient_v(p, r, top, bot, 6);
-        p.rect_stroke(r, CornerRadius::same(6), Stroke::new(1.0, Palette::BODY_EDGE_LO), StrokeKind::Inside);
-        glyphs::arrow(p, r.center(), r.height().min(r.width()) * 0.28, up_arrow, Palette::BTN_LABEL);
+        p.rect_stroke(r, CornerRadius::same(6), Stroke::new(1.0, t.body_edge_lo), StrokeKind::Inside);
+        glyphs::arrow(p, r.center(), r.height().min(r.width()) * 0.28, up_arrow, t.btn_label);
     }
     (up, dn)
 }
 
 /// Small text label drawn on the body.
 pub(crate) fn label(p: &egui::Painter, pos: Pos2, align: Align2, text: &str, size: f32, dim: bool) {
-    let col = if dim { Palette::BODY_LABEL_DIM } else { Palette::BODY_LABEL };
+    let t = theme::palette(p);
+    let col = if dim { t.body_label_dim } else { t.body_label };
     p.text(pos, align, text, FontId::proportional(size), col);
 }
 

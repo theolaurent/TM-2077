@@ -30,9 +30,11 @@ struct Settings {
     beats_per_bar: u32,
     a4: f32,
     tuner_on: bool,
-    // `serde(default)` keeps older saved settings (without this field) loadable.
+    // `serde(default)` keeps older saved settings (without these fields) loadable.
     #[serde(default = "default_tap_count")]
     tap_count: u32,
+    #[serde(default)]
+    theme: theme::Theme,
 }
 
 fn default_tap_count() -> u32 {
@@ -47,6 +49,7 @@ impl Default for Settings {
             a4: 440.0,
             tuner_on: false,
             tap_count: default_tap_count(),
+            theme: theme::Theme::default(),
         }
     }
 }
@@ -61,13 +64,14 @@ pub struct Tm2077App {
     tap_times: Vector<f64>,
     /// How many recent taps TAP TEMPO averages into a bpm.
     tap_count: u32,
+    /// Light/dark device theme.
+    theme: theme::Theme,
     /// Whether the settings popup is open.
     pub settings_open: bool,
 }
 
 impl Tm2077App {
     pub fn new(cc: &eframe::CreationContext<'_>) -> Self {
-        theme::install(&cc.egui_ctx);
         let s = cc
             .storage
             .and_then(|s| eframe::get_value::<Settings>(s, eframe::APP_KEY))
@@ -88,6 +92,7 @@ impl Tm2077App {
             audio: AudioEngine::new(),
             tap_times: Vector::new(),
             tap_count: s.tap_count.clamp(2, 8),
+            theme: s.theme,
             settings_open: false,
         }
     }
@@ -99,6 +104,7 @@ impl Tm2077App {
             a4: self.tuner.a4,
             tuner_on: self.tuner_on,
             tap_count: self.tap_count,
+            theme: self.theme,
         }
     }
 
@@ -118,16 +124,44 @@ impl Tm2077App {
         self.tap_times = taps;
     }
 
-    /// The settings popup (opened by the gear button). Kept intentionally small;
-    /// currently just the TAP TEMPO averaging window.
+    /// The settings popup (opened by the gear button), styled to match the
+    /// device. Kept intentionally small for now.
     fn settings_ui(&mut self, ctx: &egui::Context) {
+        let pal = self.theme.palette();
+        let frame = egui::Frame::default()
+            .inner_margin(egui::Margin::same(16))
+            .fill(pal.body)
+            .stroke(egui::Stroke::new(1.0, pal.body_edge_hi))
+            .corner_radius(egui::CornerRadius::same(10));
+
         let mut open = self.settings_open;
-        egui::Window::new("Settings")
+        egui::Window::new("SETTINGS")
             .collapsible(false)
             .resizable(false)
             .open(&mut open)
+            .frame(frame)
             .anchor(egui::Align2::CENTER_CENTER, egui::Vec2::ZERO)
             .show(ctx, |ui| {
+                // Amber accents / device labels for the inner widgets.
+                let v = ui.visuals_mut();
+                v.override_text_color = Some(pal.body_label);
+                v.widgets.inactive.bg_fill = pal.btn;
+                v.widgets.inactive.weak_bg_fill = pal.btn;
+                v.widgets.hovered.bg_fill = pal.btn_hi;
+                v.widgets.hovered.weak_bg_fill = pal.btn_hi;
+                v.widgets.active.bg_fill = pal.btn_lo;
+                v.widgets.inactive.fg_stroke = egui::Stroke::new(1.0, pal.btn_label);
+                v.widgets.hovered.fg_stroke = egui::Stroke::new(1.0, pal.body_label);
+                v.selection.bg_fill = pal.lcd_bg;
+                v.selection.stroke = egui::Stroke::new(1.0, pal.lcd_ink);
+
+                ui.label("THEME");
+                ui.horizontal(|ui| {
+                    ui.selectable_value(&mut self.theme, theme::Theme::Dark, "Dark");
+                    ui.selectable_value(&mut self.theme, theme::Theme::Light, "Light");
+                });
+
+                ui.add_space(8.0);
                 ui.label("TAP TEMPO");
                 ui.add(egui::Slider::new(&mut self.tap_count, 2..=8).text("taps averaged"));
                 ui.small("How many recent taps are averaged into the tempo.");
@@ -158,6 +192,9 @@ fn tapped_bpm(taps: &Vector<f64>) -> Option<u32> {
 
 impl eframe::App for Tm2077App {
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
+        // Apply the active theme (device palette + egui base visuals) up front.
+        theme::apply(ui.ctx(), self.theme);
+
         // Only drive continuous repaints when something is actually animating
         // (beat dots / needle). Otherwise let egui idle and repaint on input,
         // saving CPU/GPU — especially in a backgrounded web tab. The metronome
