@@ -61,18 +61,19 @@ fn tuner(p: &egui::Painter, r: Rect, app: &Tm2077App) {
         t.lcd_ink,
     );
 
-    // Big note letter, upper-centre.
+    // Note letter, upper-centre.
     let note_c = pos2(r.center().x, r.min.y + r.height() * 0.30);
+    let note_size = r.height() * 0.23;
     if let Some(rd) = reading {
         // Note names are ASCII ("A".."G", optionally "#"); take the letter
         // without risking a panic on a bad byte boundary.
         let letter = rd.name.get(0..1).unwrap_or(rd.name);
-        p.text(note_c, Align2::CENTER_CENTER, letter, FontId::proportional(r.height() * 0.30), t.lcd_ink);
+        p.text(note_c, Align2::CENTER_CENTER, letter, FontId::proportional(note_size), t.lcd_ink);
         if rd.name.ends_with('#') {
-            glyphs::sharp(p, note_c + vec2(r.height() * 0.16, -r.height() * 0.08), r.height() * 0.07, t.lcd_ink);
+            glyphs::sharp(p, note_c + vec2(note_size * 0.55, -note_size * 0.28), note_size * 0.23, t.lcd_ink);
         }
     } else {
-        p.text(note_c, Align2::CENTER_CENTER, "-", FontId::proportional(r.height() * 0.30), t.lcd_ink_dim);
+        p.text(note_c, Align2::CENTER_CENTER, "-", FontId::proportional(note_size), t.lcd_ink_dim);
     }
 }
 
@@ -165,13 +166,26 @@ fn needle_meter(p: &egui::Painter, r: Rect, app: &Tm2077App) {
     let bottom_ang = if metro_on { metro_ang } else { tuner_ang };
 
     let col = if tuner_on || metro_on { t.lcd_ink } else { t.lcd_ink_dim };
-    const SPLIT: f32 = 0.77; // radial split, at the needle's visible midpoint
+    // Radial split: ~30% of the visible needle for the metronome (inner), ~70%
+    // for the tuner (outer). The visible needle starts near s=0.54 (pivot is
+    // off-screen), so 0.68 gives the 30/70 division.
+    const SPLIT: f32 = 0.68;
     let split_r = radius * SPLIT;
-    // Bottom half (pivot → split): metronome.
-    p.line_segment([pivot, pivot + dir(bottom_ang) * split_r], Stroke::new(3.6, col));
-    // Top half (split → arc): tuner.
+    // Small gaps: between the needle tip and the arc, and — only when both
+    // instruments drive the needle — between the two bands at the split.
+    let tip_gap = radius * 0.04;
+    let split_gap = if tuner_on && metro_on { radius * 0.007 } else { 0.0 };
+    // Bottom band (pivot → below the split): metronome.
     p.line_segment(
-        [pivot + dir(top_ang) * split_r, pivot + dir(top_ang) * radius],
+        [pivot, pivot + dir(bottom_ang) * (split_r - split_gap)],
+        Stroke::new(3.6, col),
+    );
+    // Top band (above the split → just short of the arc): tuner.
+    p.line_segment(
+        [
+            pivot + dir(top_ang) * (split_r + split_gap),
+            pivot + dir(top_ang) * (radius - tip_gap),
+        ],
         Stroke::new(3.6, col),
     );
 }

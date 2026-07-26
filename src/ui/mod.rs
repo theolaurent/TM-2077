@@ -17,9 +17,24 @@ use crate::theme;
 /// Aspect ratio (w:h) of the device body, close to the real TM-60.
 const ASPECT: f32 = 1.62;
 
+/// Fixed design width of the device (in points). The whole drawing is a fixed
+/// size; the user scales it with scroll-to-zoom, so fonts/strokes (also in
+/// points) scale uniformly with the body instead of staying a fixed pixel size.
+const BASE_WIDTH: f32 = 820.0;
+
 /// Draw the whole device and handle its controls.
 pub fn draw_device(ui: &mut Ui, app: &mut Tm2077App) {
-    let device = fit_aspect(ui.available_rect_before_wrap().shrink(8.0), ASPECT);
+    // Scroll-to-zoom: a plain vertical scroll adjusts egui's zoom factor, which
+    // scales the entire UI (device + text) together.
+    let scroll = ui.input(|i| i.smooth_scroll_delta.y);
+    if scroll != 0.0 {
+        let z = (ui.ctx().zoom_factor() * (scroll * 0.0015).exp()).clamp(0.4, 4.0);
+        ui.ctx().set_zoom_factor(z);
+    }
+
+    // Fixed-size device, centred in the available area.
+    let avail = ui.available_rect_before_wrap();
+    let device = Rect::from_center_size(avail.center(), vec2(BASE_WIDTH, BASE_WIDTH / ASPECT));
     let p = ui.painter().clone();
 
     paint_body(&p, device);
@@ -91,17 +106,6 @@ fn led(p: &egui::Painter, c: Pos2, on: Color32, off: Color32, lit: bool) {
 // Layout helpers
 // ---------------------------------------------------------------------------
 
-/// Fit a rectangle of the given aspect ratio centred inside `outer`.
-fn fit_aspect(outer: Rect, aspect: f32) -> Rect {
-    let (ow, oh) = (outer.width(), outer.height());
-    let (w, h) = if ow / oh > aspect {
-        (oh * aspect, oh)
-    } else {
-        (ow, ow / aspect)
-    };
-    Rect::from_center_size(outer.center(), vec2(w, h))
-}
-
 /// A sub-rectangle of `r` expressed in fractional [0,1] coordinates.
 pub(crate) fn rel_rect(r: Rect, x0: f32, y0: f32, x1: f32, y1: f32) -> Rect {
     Rect::from_min_max(
@@ -132,12 +136,15 @@ pub(crate) fn icon_button(ui: &mut Ui, p: &egui::Painter, rect: Rect, tag: &str)
     resp
 }
 
-/// A pill (fully-rounded) toggle button with an indicator dot when `on`.
-pub(crate) fn pill(ui: &mut Ui, p: &egui::Painter, rect: Rect, on: bool) -> Response {
+/// A pill (fully-rounded) toggle button with a centred label; the whole button
+/// lights amber when `on`.
+pub(crate) fn pill(ui: &mut Ui, p: &egui::Painter, rect: Rect, label: &str, on: bool) -> Response {
     let t = theme::palette(p);
-    let resp = interact(ui, rect, "pill");
+    let resp = interact(ui, rect, label);
     let r = (rect.height() * 0.5) as u8;
-    let (top, bot) = if resp.is_pointer_button_down_on() {
+    let (top, bot) = if on {
+        (t.btn_on, t.lcd_bg_edge)
+    } else if resp.is_pointer_button_down_on() {
         (t.btn_lo, t.btn_lo)
     } else if resp.hovered() {
         (t.btn_hi, t.btn)
@@ -146,13 +153,8 @@ pub(crate) fn pill(ui: &mut Ui, p: &egui::Painter, rect: Rect, on: bool) -> Resp
     };
     fill_gradient_v_cr(p, rect, top, bot, CornerRadius::same(r));
     p.rect_stroke(rect, CornerRadius::same(r), Stroke::new(1.0, t.body_edge_lo), StrokeKind::Inside);
-    // Indicator dot near the left, amber when on.
-    let dot = pos2(rect.left() + rect.height() * 0.55, rect.center().y);
-    let col = if on { t.btn_on } else { t.btn_lo };
-    if on {
-        p.circle_filled(dot, rect.height() * 0.28, Color32::from_rgba_unmultiplied(0xf6, 0xac, 0x1e, 60));
-    }
-    p.circle_filled(dot, rect.height() * 0.16, col);
+    let col = if on { t.bezel } else { t.btn_label };
+    p.text(rect.center(), Align2::CENTER_CENTER, label, FontId::proportional(11.0), col);
     resp
 }
 

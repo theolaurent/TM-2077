@@ -15,10 +15,9 @@ pub fn draw(ui: &mut egui::Ui, p: &egui::Painter, d: Rect, _lcd: Rect, app: &mut
 }
 
 fn left_column(ui: &mut egui::Ui, p: &egui::Painter, d: Rect, app: &mut Tm2077App) {
-    // TUNER ON pill.
-    label(p, pos2(d.min.x + d.width() * 0.115, d.min.y + d.height() * 0.055), Align2::CENTER_CENTER, "TUNER ON", 11.0, false);
-    let tuner_pill = rel_rect(d, 0.035, 0.09, 0.195, 0.155);
-    if pill(ui, p, tuner_pill, app.tuner_on).clicked() {
+    // TUNER toggle pill (label inside; whole button lights amber when on).
+    let tuner_pill = rel_rect(d, 0.035, 0.06, 0.195, 0.15);
+    if pill(ui, p, tuner_pill, "TUNER", app.tuner_on).clicked() {
         app.tuner_on = !app.tuner_on;
     }
 
@@ -35,10 +34,9 @@ fn left_column(ui: &mut egui::Ui, p: &egui::Painter, d: Rect, app: &mut Tm2077Ap
 }
 
 fn right_column(ui: &mut egui::Ui, p: &egui::Painter, d: Rect, app: &mut Tm2077App) {
-    // METRONOME ON pill (starts/stops the metronome).
-    label(p, pos2(d.min.x + d.width() * 0.885, d.min.y + d.height() * 0.055), Align2::CENTER_CENTER, "METRONOME ON", 10.0, false);
-    let metro_pill = rel_rect(d, 0.805, 0.09, 0.965, 0.155);
-    if pill(ui, p, metro_pill, app.metronome.running).clicked() {
+    // METRONOME toggle pill (starts/stops; label inside, lights amber when on).
+    let metro_pill = rel_rect(d, 0.805, 0.06, 0.965, 0.15);
+    if pill(ui, p, metro_pill, "METRONOME", app.metronome.running).clicked() {
         app.metronome.running = !app.metronome.running;
     }
 
