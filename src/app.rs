@@ -19,8 +19,8 @@ pub struct MetronomeState {
     pub bpm: u32,
     pub beats_per_bar: u32,
     pub running: bool,
-    /// Which beat (0-based) is currently sounding / flashing.
-    pub current_beat: u32,
+    /// Monotonic beat counter from the audio engine; the UI watches it change.
+    pub beat_count: u32,
 }
 
 /// Persisted user settings (bpm/beats/A4/tuner toggle), stored via eframe.
@@ -74,7 +74,7 @@ impl Tm2077App {
                 bpm: s.bpm,
                 beats_per_bar: s.beats_per_bar,
                 running: false,
-                current_beat: 0,
+                beat_count: 0,
             },
             audio: AudioEngine::new(),
             tap_times: Vector::new(),
@@ -144,7 +144,7 @@ impl eframe::App for Tm2077App {
 
         // Pull the latest audio state into the display model.
         self.audio.poll();
-        self.metronome.current_beat = self.audio.metronome_beat();
+        self.metronome.beat_count = self.audio.metronome_beat_count();
         self.tuner.reading = if self.tuner_on {
             self.audio.tuner_reading()
         } else {

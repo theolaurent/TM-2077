@@ -124,7 +124,7 @@ fn needle_meter(p: &egui::Painter, r: Rect, app: &Tm2077App) {
     let side_id = egui::Id::new("metro_swing_side");
     let last_id = egui::Id::new("metro_last_beat");
     let swing_id = egui::Id::new("metro_swing");
-    let beat = app.metronome.current_beat;
+    let beat = app.metronome.beat_count;
     let side = ctx.memory_mut(|m| {
         if !metro_on {
             // Idle: park on the left and record the current beat, so the first

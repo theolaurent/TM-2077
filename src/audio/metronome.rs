@@ -22,8 +22,9 @@ pub struct Metronome {
     /// Latest UI settings, shared with the audio thread. The UI writes; the
     /// audio callback reads. Critical sections are tiny (a `Copy` in/out).
     control: Arc<Mutex<Control>>,
-    /// Beat currently sounding (0-based), written by the audio callback.
-    current_beat: Arc<AtomicU32>,
+    /// Monotonic beat counter, incremented once per beat by the audio callback.
+    /// The UI watches it for beat changes (e.g. to swing the needle).
+    beat_count: Arc<AtomicU32>,
     stream: Option<cpal::Stream>,
     started: bool,
 }
@@ -37,7 +38,7 @@ impl Metronome {
                 running: false,
                 tone: None,
             })),
-            current_beat: Arc::new(AtomicU32::new(0)),
+            beat_count: Arc::new(AtomicU32::new(0)),
             stream: None,
             started: false,
         }
@@ -59,8 +60,8 @@ impl Metronome {
         }
     }
 
-    pub fn beat(&self) -> u32 {
-        self.current_beat.load(Ordering::Relaxed)
+    pub fn beat_count(&self) -> u32 {
+        self.beat_count.load(Ordering::Relaxed)
     }
 
     /// Lazily open the audio stream. Must be triggered by a user gesture on web
@@ -109,11 +110,12 @@ impl Metronome {
         // panic (see AGENTS.md). Guards a device that reports zero channels.
         let channels = (cfg.channels as usize).max(1);
         let control = self.control.clone();
-        let current_beat = self.current_beat.clone();
+        let beat_count = self.beat_count.clone();
 
         // DSP state owned by the callback.
         let mut samples_since_beat = f64::MAX; // trigger immediately when running
         let mut beat_index: u32 = 0;
+        let mut tick: u32 = 0; // monotonic beat counter reported to the UI
         let mut prev_running = false;
         let mut env: f32 = 0.0;
         let mut phase: f32 = 0.0;
@@ -161,7 +163,8 @@ impl Metronome {
                                 freq = if downbeat { 1000.0 } else { 800.0 };
                                 env = 1.0;
                                 phase = 0.0;
-                                current_beat.store(beat_index, Ordering::Relaxed);
+                                tick = tick.wrapping_add(1);
+                                beat_count.store(tick, Ordering::Relaxed);
                                 beat_index = (beat_index + 1) % ctl.beats.max(1);
                             }
                         }

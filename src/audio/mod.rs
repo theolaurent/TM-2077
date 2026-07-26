@@ -30,8 +30,8 @@ impl AudioEngine {
         self.metronome.set(bpm, beats, running);
     }
 
-    pub fn metronome_beat(&self) -> u32 {
-        self.metronome.beat()
+    pub fn metronome_beat_count(&self) -> u32 {
+        self.metronome.beat_count()
     }
 
     /// Play (or stop) a continuous reference tone through the output stream.
