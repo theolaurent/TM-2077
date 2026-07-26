@@ -26,6 +26,8 @@ pub fn draw(p: &egui::Painter, rect: Rect, app: &Tm2077App) {
     tabs(p, rect);
     tuner(p, rect, app);
     metronome(p, rect, app);
+    // Shared analog needle (tuner + metronome), drawn on top of both halves.
+    needle_meter(p, rect, app);
 }
 
 fn tabs(p: &egui::Painter, r: Rect) {
@@ -69,11 +71,9 @@ fn tuner(p: &egui::Painter, r: Rect, app: &Tm2077App) {
     } else {
         p.text(note_c, Align2::CENTER_CENTER, "-", FontId::proportional(r.height() * 0.30), Palette::LCD_INK_DIM);
     }
-
-    needle_meter(p, r, reading.map(|x| x.cents), reading.is_some());
 }
 
-fn needle_meter(p: &egui::Painter, r: Rect, cents: Option<f32>, active: bool) {
+fn needle_meter(p: &egui::Painter, r: Rect, app: &Tm2077App) {
     // Clip everything to the screen so the (off-screen) pivot doesn't spill.
     let p = p.with_clip_rect(r);
     let h = r.height();
@@ -100,10 +100,76 @@ fn needle_meter(p: &egui::Painter, r: Rect, cents: Option<f32>, active: bool) {
     p.text(pivot + dir(-max) * radius + vec2(-2.0, 10.0), Align2::CENTER_CENTER, "-50", FontId::proportional(11.0), Palette::LCD_INK);
     p.text(pivot + dir(max) * radius + vec2(2.0, 10.0), Align2::CENTER_CENTER, "+50", FontId::proportional(11.0), Palette::LCD_INK);
 
-    // The needle (base off-screen at the pivot; clip hides the part below the LCD).
-    let c = cents.unwrap_or(0.0).clamp(-50.0, 50.0) / 50.0;
-    let col = if !active { Palette::LCD_INK_DIM } else { Palette::LCD_INK };
-    p.line_segment([pivot, pivot + dir(c * max) * radius], Stroke::new(3.6, col));
+    // --- Shared needle ---
+    // The tuner deflects the needle by cents; the metronome swings it side to
+    // side, reaching an extreme on every beat. With both active the needle
+    // hinges at its visible midpoint — the metronome drives the lower half, the
+    // tuner the upper half; with only one active both halves share that angle so
+    // the whole needle moves as one.
+    let ctx = p.ctx();
+
+    let tuner_on = app.tuner_on;
+    let tuner_ang = if tuner_on {
+        app.tuner
+            .reading
+            .map(|rd| rd.cents.clamp(-50.0, 50.0) / 50.0 * max)
+            .unwrap_or(0.0)
+    } else {
+        0.0
+    };
+
+    let metro_on = app.metronome.running;
+    // Flip the swing side every time the audio beat advances (works for any
+    // metre), then let egui ease the needle toward that extreme over one beat.
+    let side_id = egui::Id::new("metro_swing_side");
+    let last_id = egui::Id::new("metro_last_beat");
+    let swing_id = egui::Id::new("metro_swing");
+    let beat = app.metronome.current_beat;
+    let side = ctx.memory_mut(|m| {
+        if !metro_on {
+            // Idle: park on the left and record the current beat, so the first
+            // beat sweeps fully right instead of a half-swing from centre.
+            m.data.insert_temp(last_id, beat);
+            m.data.insert_temp(side_id, -1.0f32);
+            return -1.0f32;
+        }
+        let last = m.data.get_temp::<u32>(last_id);
+        let mut side = m.data.get_temp::<f32>(side_id).unwrap_or(-1.0);
+        if last != Some(beat) {
+            // Flip on every beat change; the first observation just records it.
+            if last.is_some() {
+                side = -side;
+            }
+            m.data.insert_temp(last_id, beat);
+            m.data.insert_temp(side_id, side);
+        }
+        side
+    });
+    let beat_secs = (60.0 / app.metronome.bpm.max(1) as f32).clamp(0.05, 1.0);
+    let metro_ang = if metro_on {
+        ctx.animate_value_with_time(swing_id, side * max, beat_secs)
+    } else {
+        // Snap to the left extreme while idle so a run begins there.
+        ctx.animate_value_with_time(swing_id, -max, 0.0)
+    };
+
+    // Two independent needles sharing the pivot: the outer (top) band is the
+    // tuner's needle, the inner (bottom) band the metronome's — each just the
+    // usual full-scale needle, truncated to its half. When only one instrument
+    // is active it owns both bands, i.e. the whole needle.
+    let top_ang = if tuner_on { tuner_ang } else { metro_ang };
+    let bottom_ang = if metro_on { metro_ang } else { tuner_ang };
+
+    let col = if tuner_on || metro_on { Palette::LCD_INK } else { Palette::LCD_INK_DIM };
+    const SPLIT: f32 = 0.77; // radial split, at the needle's visible midpoint
+    let split_r = radius * SPLIT;
+    // Bottom half (pivot → split): metronome.
+    p.line_segment([pivot, pivot + dir(bottom_ang) * split_r], Stroke::new(3.6, col));
+    // Top half (split → arc): tuner.
+    p.line_segment(
+        [pivot + dir(top_ang) * split_r, pivot + dir(top_ang) * radius],
+        Stroke::new(3.6, col),
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -124,17 +190,4 @@ fn metronome(p: &egui::Painter, r: Rect, app: &Tm2077App) {
     // Two cells: BEAT goes up to 12, which a single cell would truncate to "2".
     let beat_rect = shrunk(rel_rect(r, 0.845, 0.47, 0.97, 0.67), SEG_SCALE);
     seg::number(p, beat_rect, m.beats_per_bar, 2, Palette::LCD_INK, Palette::LCD_INK_DIM);
-
-    // Running beat indicator dots along the bottom-right.
-    let n = m.beats_per_bar.max(1);
-    let y = r.min.y + r.height() * 0.86;
-    let gap = (r.width() * 0.26) / (n.max(1) as f32);
-    let start_x = r.min.x + r.width() * 0.70;
-    for b in 0..n {
-        let x = start_x + b as f32 * gap;
-        let on = m.running && b == m.current_beat;
-        let rad = if b == 0 { 4.5 } else { 3.5 };
-        let col = if on { Palette::LCD_INK } else { Palette::LCD_INK_DIM };
-        p.circle_filled(pos2(x, y), rad, col);
-    }
 }
