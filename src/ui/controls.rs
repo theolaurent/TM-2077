@@ -5,7 +5,7 @@
 use egui::{Align2, FontId, Rect, pos2};
 
 use super::{glyphs, icon_button, label, pill, rel_rect, rocker, round_button};
-use crate::app::Tm2077App;
+use crate::app::{next_graduation, prev_graduation, Tm2077App};
 use crate::theme;
 
 pub fn draw(ui: &mut egui::Ui, p: &egui::Painter, d: Rect, _lcd: Rect, app: &mut Tm2077App) {
@@ -95,10 +95,18 @@ fn right_column(ui: &mut egui::Ui, p: &egui::Painter, d: Rect, app: &mut Tm2077A
     }
     let (tu, td) = rocker(ui, p, tempo, "tempo");
     if repeat_fire(ui, &tu) {
-        app.metronome.bpm = (app.metronome.bpm + 1).min(300);
+        app.metronome.bpm = if app.metronome.graduated {
+            next_graduation(app.metronome.bpm)
+        } else {
+            (app.metronome.bpm + 1).min(300)
+        };
     }
     if repeat_fire(ui, &td) {
-        app.metronome.bpm = app.metronome.bpm.saturating_sub(1).max(30);
+        app.metronome.bpm = if app.metronome.graduated {
+            prev_graduation(app.metronome.bpm)
+        } else {
+            app.metronome.bpm.saturating_sub(1).max(30)
+        };
     }
 
     // Settings gear — a push-button in the bottom-right corner that opens the

@@ -25,6 +25,8 @@ pub struct MetronomeState {
     pub running: bool,
     /// Monotonic beat counter from the audio engine; the UI watches it change.
     pub beat_count: u32,
+    /// TEMPO up/down steps through old-school graduations instead of by 1 bpm.
+    pub graduated: bool,
 }
 
 /// Persisted user settings (bpm/beats/A4/tuner toggle), stored via eframe.
@@ -43,6 +45,8 @@ struct Settings {
     scale: Scale,
     #[serde(default)]
     transpose: Transposition,
+    #[serde(default)]
+    tempo_graduated: bool,
 }
 
 fn default_tap_count() -> u32 {
@@ -60,6 +64,7 @@ impl Default for Settings {
             theme: theme::Theme::default(),
             scale: Scale::default(),
             transpose: Transposition::default(),
+            tempo_graduated: false,
         }
     }
 }
@@ -100,6 +105,7 @@ impl Tm2077App {
                 beats_per_bar: s.beats_per_bar,
                 running: false,
                 beat_count: 0,
+                graduated: s.tempo_graduated,
             },
             audio: AudioEngine::new(),
             tap_times: Vector::new(),
@@ -119,6 +125,7 @@ impl Tm2077App {
             theme: self.theme,
             scale: self.tuner.scale,
             transpose: self.tuner.transpose,
+            tempo_graduated: self.metronome.graduated,
         }
     }
 
@@ -221,6 +228,13 @@ impl Tm2077App {
                 ui.label("TAP TEMPO");
                 ui.add(egui::Slider::new(&mut self.tap_count, 2..=8).text("taps averaged"));
                 ui.small("How many recent taps are averaged into the tempo.");
+
+                ui.add_space(8.0);
+                ui.label("TEMPO STEP");
+                ui.horizontal(|ui| {
+                    ui.selectable_value(&mut self.metronome.graduated, false, "1 bpm");
+                    ui.selectable_value(&mut self.metronome.graduated, true, "Graduated");
+                });
             });
 
         if close || ctx.input(|i| i.key_pressed(egui::Key::Escape)) {
@@ -262,6 +276,28 @@ fn tapped_bpm(taps: &Vector<f64>) -> Option<u32> {
         .then_some((last - first) / intervals)
         .filter(|&avg| avg > 0.0)
         .map(|avg| ((60.0 / avg).round() as i64).clamp(30, 300) as u32)
+}
+
+/// Traditional Maelzel metronome graduations (40–208 bpm): dense at the low end,
+/// coarser as the tempo rises.
+const GRADUATIONS: [u32; 39] = [
+    40, 42, 44, 46, 48, 50, 52, 54, 56, 58, 60, 63, 66, 69, 72, 76, 80, 84, 88, 92, 96, 100, 104,
+    108, 112, 116, 120, 126, 132, 138, 144, 152, 160, 168, 176, 184, 192, 200, 208,
+];
+
+/// The next graduation strictly above `bpm` (unchanged if already at/above the top).
+pub(crate) fn next_graduation(bpm: u32) -> u32 {
+    GRADUATIONS.iter().copied().find(|&g| g > bpm).unwrap_or(bpm)
+}
+
+/// The previous graduation strictly below `bpm` (unchanged if already at/below the bottom).
+pub(crate) fn prev_graduation(bpm: u32) -> u32 {
+    GRADUATIONS
+        .iter()
+        .rev()
+        .copied()
+        .find(|&g| g < bpm)
+        .unwrap_or(bpm)
 }
 
 impl eframe::App for Tm2077App {
@@ -356,6 +392,20 @@ mod tests {
     fn tapped_bpm_averages_intervals() {
         // 0.5 s between taps → 120 bpm.
         assert_eq!(tapped_bpm(&v(&[0.0, 0.5, 1.0, 1.5])), Some(120));
+    }
+
+    #[test]
+    fn graduations_step_up_and_down() {
+        assert_eq!(next_graduation(120), 126);
+        assert_eq!(prev_graduation(120), 116);
+        assert_eq!(next_graduation(60), 63);
+        assert_eq!(prev_graduation(63), 60);
+        assert_eq!(next_graduation(150), 152); // between graduations
+        assert_eq!(prev_graduation(150), 144);
+        assert_eq!(next_graduation(208), 208); // stays at the top
+        assert_eq!(prev_graduation(40), 40); // stays at the bottom
+        assert_eq!(next_graduation(250), 250); // above the scale: up stays
+        assert_eq!(prev_graduation(250), 208); // above the scale: down enters
     }
 
     #[test]
