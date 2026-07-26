@@ -158,7 +158,7 @@ pub(crate) fn pill(ui: &mut Ui, p: &egui::Painter, rect: Rect, label: &str, on: 
     resp
 }
 
-/// A round push-button (used for TAP TEMPO). `base/hi/lo` set its colour.
+/// A round push-button (used for TAP TEMPO). `base/lo` set its colour.
 pub(crate) fn round_button(
     ui: &mut Ui,
     p: &egui::Painter,
@@ -166,7 +166,6 @@ pub(crate) fn round_button(
     radius: f32,
     label: &str,
     base: Color32,
-    hi: Color32,
     lo: Color32,
 ) -> Response {
     let rect = Rect::from_center_size(center, vec2(radius * 2.0, radius * 2.0));
@@ -175,8 +174,6 @@ pub(crate) fn round_button(
     p.circle_filled(center + vec2(0.0, 2.0), radius, Color32::from_black_alpha(120));
     p.circle_filled(center, radius, if down { lo } else { base });
     p.circle_stroke(center, radius, Stroke::new(1.5, lo));
-    // Glossy top highlight.
-    p.circle_filled(center - vec2(0.0, radius * 0.35), radius * 0.5, hi.gamma_multiply(if down { 0.2 } else { 0.5 }));
     if !label.is_empty() {
         p.text(center, Align2::CENTER_CENTER, label, FontId::proportional(11.0), Color32::WHITE);
     }

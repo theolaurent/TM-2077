@@ -126,7 +126,10 @@ impl Tm2077App {
 
     /// The settings popup (opened by the gear button), styled to match the
     /// device. Kept intentionally small for now.
-    fn settings_ui(&mut self, ctx: &egui::Context) {
+    fn settings_ui(&mut self, ctx: &egui::Context, was_open: bool) {
+        if !self.settings_open {
+            return;
+        }
         let pal = self.theme.palette();
         let frame = egui::Frame::default()
             .inner_margin(egui::Margin::same(16))
@@ -134,11 +137,11 @@ impl Tm2077App {
             .stroke(egui::Stroke::new(1.0, pal.body_edge_hi))
             .corner_radius(egui::CornerRadius::same(10));
 
-        let mut open = self.settings_open;
-        egui::Window::new("SETTINGS")
+        let mut close = false;
+        let inner = egui::Window::new("settings")
+            .title_bar(false)
             .collapsible(false)
             .resizable(false)
-            .open(&mut open)
             .frame(frame)
             .anchor(egui::Align2::CENTER_CENTER, egui::Vec2::ZERO)
             .show(ctx, |ui| {
@@ -155,7 +158,28 @@ impl Tm2077App {
                 v.selection.bg_fill = pal.lcd_bg;
                 v.selection.stroke = egui::Stroke::new(1.0, pal.lcd_ink);
 
-                ui.label("THEME");
+                // THEME label with the close cross pushed to the top-right of the
+                // same row, so the cross doesn't claim a row of its own.
+                ui.horizontal(|ui| {
+                    ui.label("THEME");
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        let (rect, resp) =
+                            ui.allocate_exact_size(egui::vec2(15.0, 15.0), egui::Sense::click());
+                        let col = if resp.hovered() { pal.body_label } else { pal.body_label_dim };
+                        let stroke = egui::Stroke::new(1.6, col);
+                        let pad = egui::vec2(4.0, 4.0);
+                        ui.painter()
+                            .line_segment([rect.left_top() + pad, rect.right_bottom() - pad], stroke);
+                        ui.painter().line_segment(
+                            [
+                                rect.right_top() + egui::vec2(-pad.x, pad.y),
+                                rect.left_bottom() + egui::vec2(pad.x, -pad.y),
+                            ],
+                            stroke,
+                        );
+                        close |= resp.clicked();
+                    });
+                });
                 ui.horizontal(|ui| {
                     ui.selectable_value(&mut self.theme, theme::Theme::Dark, "Dark");
                     ui.selectable_value(&mut self.theme, theme::Theme::Light, "Light");
@@ -166,7 +190,25 @@ impl Tm2077App {
                 ui.add(egui::Slider::new(&mut self.tap_count, 2..=8).text("taps averaged"));
                 ui.small("How many recent taps are averaged into the tempo.");
             });
-        self.settings_open = open;
+
+        if close || ctx.input(|i| i.key_pressed(egui::Key::Escape)) {
+            self.settings_open = false;
+        }
+
+        // A click anywhere outside the popup closes it — but not on the frame it
+        // was opened, so the opening click doesn't immediately dismiss it.
+        if was_open {
+            let win_rect = inner.map(|r| r.response.rect);
+            let close_it = ctx.input(|i| {
+                i.pointer.any_click()
+                    && win_rect.map_or(true, |wr| {
+                        i.pointer.interact_pos().map_or(true, |pos| !wr.contains(pos))
+                    })
+            });
+            if close_it {
+                self.settings_open = false;
+            }
+        }
     }
 }
 
@@ -208,6 +250,9 @@ impl eframe::App for Tm2077App {
         // the same click that turns the tuner on requests the mic in that gesture
         // instead of needing a second click.
         let clicked = ui.input(|i| i.pointer.any_click());
+        // Whether the settings popup was already open *before* this frame's
+        // clicks — so the click that opens it doesn't also close it.
+        let settings_was_open = self.settings_open;
 
         // Pull the latest audio state into the display model.
         self.audio.poll();
@@ -236,7 +281,7 @@ impl eframe::App for Tm2077App {
             self.audio.on_user_gesture();
         }
 
-        self.settings_ui(ui.ctx());
+        self.settings_ui(ui.ctx(), settings_was_open);
     }
 
     fn save(&mut self, storage: &mut dyn eframe::Storage) {

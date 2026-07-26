@@ -19,12 +19,46 @@ pub fn gear(p: &egui::Painter, c: Pos2, radius: f32, color: Color32) {
     const TEETH: usize = 8;
     let rim = radius * 0.62;
     let sw = (radius * 0.16).max(1.3);
+    let tw = sw * 2.0; // tooth width
     for k in 0..TEETH {
         let a = k as f32 / TEETH as f32 * std::f32::consts::TAU;
         let d = vec2(a.cos(), a.sin());
-        p.line_segment([c + d * rim, c + d * radius], Stroke::new(sw * 1.5, color));
+        rounded_bar(p, c + d * rim, c + d * radius, tw, tw * 0.35, color);
     }
-    p.circle_stroke(c, rim, Stroke::new(sw, color));
+    // Thicken inward: shrink the radius by half the width so the outer edge
+    // stays at `rim` (where the teeth meet it) and the ring grows toward centre.
+    let ring_w = sw * 1.7;
+    p.circle_stroke(c, rim - ring_w * 0.5, Stroke::new(ring_w, color));
+}
+
+/// A filled bar (rotated rectangle) from centre-line `a` to `b`, width `w`, with
+/// its four corners rounded by radius `r`.
+fn rounded_bar(p: &egui::Painter, a: Pos2, b: Pos2, w: f32, r: f32, color: Color32) {
+    let axis = b - a;
+    let len = axis.length();
+    if len <= 1e-4 {
+        return;
+    }
+    let u = axis / len; // along the bar
+    let v = egui::vec2(-u.y, u.x); // across it
+    let hw = w * 0.5;
+    let r = r.min(hw).min(len * 0.5);
+    // Four corners as (arc centre, inward-edge normal, outward-edge normal).
+    let corners = [
+        (b - u * r + v * (hw - r), u, v),
+        (a + u * r + v * (hw - r), v, -u),
+        (a + u * r - v * (hw - r), -u, -v),
+        (b - u * r - v * (hw - r), -v, u),
+    ];
+    const A: usize = 3;
+    let mut pts = Vec::with_capacity((A + 1) * 4);
+    for (center, n_in, n_out) in corners {
+        for i in 0..=A {
+            let th = (i as f32 / A as f32) * std::f32::consts::FRAC_PI_2;
+            pts.push(center + (n_in * th.cos() + n_out * th.sin()) * r);
+        }
+    }
+    p.add(Shape::convex_polygon(pts, color, Stroke::NONE));
 }
 
 /// A solid triangle marker pointing down (used on the tuner arc).

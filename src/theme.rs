@@ -59,7 +59,6 @@ pub struct Palette {
 
     // --- TAP TEMPO (red) ---
     pub tap: Color32,
-    pub tap_hi: Color32,
     pub tap_lo: Color32,
 }
 
@@ -93,7 +92,6 @@ impl Palette {
             btn_on: Color32::from_rgb(0xf6, 0xac, 0x1e),
 
             tap: Color32::from_rgb(0xe6, 0x43, 0x3f),
-            tap_hi: Color32::from_rgb(0xf4, 0x6d, 0x66),
             tap_lo: Color32::from_rgb(0xb0, 0x2c, 0x2a),
         }
     }

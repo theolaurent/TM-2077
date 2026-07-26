@@ -76,7 +76,7 @@ fn centre(ui: &mut egui::Ui, p: &egui::Painter, d: Rect, app: &mut Tm2077App) {
     // TAP TEMPO (red round button).
     let tap_c = pos2(d.min.x + d.width() * 0.66, d.min.y + d.height() * 0.79);
     label(p, pos2(tap_c.x, tap_c.y - d.height() * 0.135), Align2::CENTER_CENTER, "TAP TEMPO", 10.0, false);
-    let tap = round_button(ui, p, tap_c, d.height() * 0.085, "", t.tap, t.tap_hi, t.tap_lo);
+    let tap = round_button(ui, p, tap_c, d.height() * 0.085, "", t.tap, t.tap_lo);
     if tap.clicked() {
         let now = ui.input(|i| i.time);
         app.tap_tempo(now);
