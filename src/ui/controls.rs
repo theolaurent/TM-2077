@@ -4,7 +4,7 @@
 
 use egui::{Align2, FontId, Rect, pos2};
 
-use super::{label, pill, rel_rect, rocker, round_button};
+use super::{glyphs, icon_button, label, pill, rel_rect, rocker, round_button};
 use crate::app::Tm2077App;
 use crate::theme::Palette;
 
@@ -60,6 +60,15 @@ fn right_column(ui: &mut egui::Ui, p: &egui::Painter, d: Rect, app: &mut Tm2077A
     }
     if td.clicked() {
         app.metronome.bpm = app.metronome.bpm.saturating_sub(1).max(30);
+    }
+
+    // Settings gear — a push-button in the bottom-right corner that opens the
+    // settings popup.
+    let gear_rect = rel_rect(d, 0.89, 0.85, 0.965, 0.95);
+    let resp = icon_button(ui, p, gear_rect, "settings");
+    glyphs::gear(p, gear_rect.center(), gear_rect.height() * 0.34, Palette::BTN_LABEL);
+    if resp.clicked() {
+        app.settings_open = !app.settings_open;
     }
 }
 

@@ -30,6 +30,13 @@ struct Settings {
     beats_per_bar: u32,
     a4: f32,
     tuner_on: bool,
+    // `serde(default)` keeps older saved settings (without this field) loadable.
+    #[serde(default = "default_tap_count")]
+    tap_count: u32,
+}
+
+fn default_tap_count() -> u32 {
+    4
 }
 
 impl Default for Settings {
@@ -39,6 +46,7 @@ impl Default for Settings {
             beats_per_bar: 4,
             a4: 440.0,
             tuner_on: false,
+            tap_count: default_tap_count(),
         }
     }
 }
@@ -51,6 +59,10 @@ pub struct Tm2077App {
     audio: AudioEngine,
     /// Recent TAP TEMPO timestamps (seconds), as a persistent vector.
     tap_times: Vector<f64>,
+    /// How many recent taps TAP TEMPO averages into a bpm.
+    tap_count: u32,
+    /// Whether the settings popup is open.
+    pub settings_open: bool,
 }
 
 impl Tm2077App {
@@ -75,6 +87,8 @@ impl Tm2077App {
             },
             audio: AudioEngine::new(),
             tap_times: Vector::new(),
+            tap_count: s.tap_count.clamp(2, 8),
+            settings_open: false,
         }
     }
 
@@ -84,6 +98,7 @@ impl Tm2077App {
             beats_per_bar: self.metronome.beats_per_bar,
             a4: self.tuner.a4,
             tuner_on: self.tuner_on,
+            tap_count: self.tap_count,
         }
     }
 
@@ -95,12 +110,29 @@ impl Tm2077App {
         // All of this builds new persistent vectors rather than mutating in place.
         let restart = matches!(self.tap_times.last(), Some(&last) if now - last > 2.0);
         let base = if restart { Vector::new() } else { self.tap_times.clone() };
-        let taps = keep_last(&base.push_back(now), 4);
+        let taps = keep_last(&base.push_back(now), self.tap_count.max(2) as usize);
 
         if let Some(bpm) = tapped_bpm(&taps) {
             self.metronome.bpm = bpm;
         }
         self.tap_times = taps;
+    }
+
+    /// The settings popup (opened by the gear button). Kept intentionally small;
+    /// currently just the TAP TEMPO averaging window.
+    fn settings_ui(&mut self, ctx: &egui::Context) {
+        let mut open = self.settings_open;
+        egui::Window::new("Settings")
+            .collapsible(false)
+            .resizable(false)
+            .open(&mut open)
+            .anchor(egui::Align2::CENTER_CENTER, egui::Vec2::ZERO)
+            .show(ctx, |ui| {
+                ui.label("TAP TEMPO");
+                ui.add(egui::Slider::new(&mut self.tap_count, 2..=8).text("taps averaged"));
+                ui.small("How many recent taps are averaged into the tempo.");
+            });
+        self.settings_open = open;
     }
 }
 
@@ -166,6 +198,8 @@ impl eframe::App for Tm2077App {
         if clicked {
             self.audio.on_user_gesture();
         }
+
+        self.settings_ui(ui.ctx());
     }
 
     fn save(&mut self, storage: &mut dyn eframe::Storage) {

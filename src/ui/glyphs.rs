@@ -14,6 +14,19 @@ pub fn arrow(p: &egui::Painter, c: Pos2, size: f32, up: bool, color: Color32) {
     p.add(Shape::convex_polygon(pts, color, Stroke::NONE));
 }
 
+/// A gear / cog icon (settings), centred at `c` with outer `radius`.
+pub fn gear(p: &egui::Painter, c: Pos2, radius: f32, color: Color32) {
+    const TEETH: usize = 8;
+    let rim = radius * 0.62;
+    let sw = (radius * 0.16).max(1.3);
+    for k in 0..TEETH {
+        let a = k as f32 / TEETH as f32 * std::f32::consts::TAU;
+        let d = vec2(a.cos(), a.sin());
+        p.line_segment([c + d * rim, c + d * radius], Stroke::new(sw * 1.5, color));
+    }
+    p.circle_stroke(c, rim, Stroke::new(sw, color));
+}
+
 /// A solid triangle marker pointing down (used on the tuner arc).
 pub fn marker_down(p: &egui::Painter, c: Pos2, size: f32, color: Color32) {
     let pts = vec![

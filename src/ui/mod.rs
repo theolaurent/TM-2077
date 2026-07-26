@@ -112,6 +112,23 @@ pub(crate) fn rel_rect(r: Rect, x0: f32, y0: f32, x1: f32, y1: f32) -> Rect {
 // Shared widgets
 // ---------------------------------------------------------------------------
 
+/// A square rubber push-button chrome (gradient + hover/press states) with no
+/// label; the caller paints an icon over the returned rect. Same look as the
+/// rocker buttons. Returns the interaction response.
+pub(crate) fn icon_button(ui: &mut Ui, p: &egui::Painter, rect: Rect, tag: &str) -> Response {
+    let resp = interact(ui, rect, tag);
+    let (top, bot) = if resp.is_pointer_button_down_on() {
+        (Palette::BTN_LO, Palette::BTN_LO)
+    } else if resp.hovered() {
+        (Palette::BTN_HI, Palette::BTN)
+    } else {
+        (Palette::BTN, Palette::BTN_LO)
+    };
+    fill_gradient_v(p, rect, top, bot, 6);
+    p.rect_stroke(rect, CornerRadius::same(6), Stroke::new(1.0, Palette::BODY_EDGE_LO), StrokeKind::Inside);
+    resp
+}
+
 /// A pill (fully-rounded) toggle button with an indicator dot when `on`.
 pub(crate) fn pill(ui: &mut Ui, p: &egui::Painter, rect: Rect, on: bool) -> Response {
     let resp = interact(ui, rect, "pill");
