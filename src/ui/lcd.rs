@@ -7,6 +7,15 @@ use super::{fill_gradient_v, glyphs, rel_rect, seg};
 use crate::app::Tm2077App;
 use crate::theme::Palette;
 
+/// Shrink factor applied to the 7-segment readouts (calib / BPM / beat).
+const SEG_SCALE: f32 = 0.65;
+
+/// Scale a rect about its centre — used to fine-tune readout sizes without
+/// moving where they sit on the LCD.
+fn shrunk(rect: Rect, f: f32) -> Rect {
+    Rect::from_center_size(rect.center(), rect.size() * f)
+}
+
 pub fn draw(p: &egui::Painter, rect: Rect, app: &Tm2077App) {
     // Recessed frame: dark outer, grey inner bezel, amber screen.
     p.rect_filled(rect.expand(7.0), CornerRadius::same(10), Palette::BEZEL);
@@ -21,9 +30,9 @@ pub fn draw(p: &egui::Painter, rect: Rect, app: &Tm2077App) {
 
 fn tabs(p: &egui::Painter, r: Rect) {
     for (frac, text) in [((0.02f32, 0.30f32), "TUNER"), ((0.70, 0.98), "METRONOME")] {
-        let tab = rel_rect(r, frac.0, 0.03, frac.1, 0.155);
+        let tab = shrunk(rel_rect(r, frac.0, 0.03, frac.1, 0.155), 0.8);
         p.rect_filled(tab, CornerRadius::same(4), Palette::LCD_INK);
-        p.text(tab.center(), Align2::CENTER_CENTER, text, FontId::proportional(12.0), Palette::LCD_BG);
+        p.text(tab.center(), Align2::CENTER_CENTER, text, FontId::proportional(10.0), Palette::LCD_BG);
     }
 }
 
@@ -33,11 +42,12 @@ fn tabs(p: &egui::Painter, r: Rect) {
 fn tuner(p: &egui::Painter, r: Rect, app: &Tm2077App) {
     let reading = if app.tuner_on { app.tuner.reading } else { None };
 
-    // Frequency readout (7-seg) top-left. Four cells so instruments above
-    // 999 Hz (e.g. violin high E ~1319 Hz) aren't truncated.
-    let hz_rect = rel_rect(r, 0.04, 0.20, 0.30, 0.35);
-    let hz = reading.map(|x| x.freq.round() as u32).unwrap_or(0);
-    seg::number(p, hz_rect, hz, 4, Palette::LCD_INK, Palette::LCD_INK_DIM);
+    // A4 calibration readout (7-seg), mirroring the metronome's TEMPO field on
+    // the far side of the LCD. The calib range (410-480 Hz) is always three
+    // digits, so this is a fixed 3-cell field, symmetric with BPM.
+    let hz_rect = shrunk(rel_rect(r, 0.03, 0.15, 0.26, 0.39), SEG_SCALE);
+    let a4 = app.tuner.a4.round() as u32;
+    seg::number(p, hz_rect, a4, 3, Palette::LCD_INK, Palette::LCD_INK_DIM);
     p.text(
         pos2(hz_rect.max.x + 6.0, hz_rect.center().y),
         Align2::LEFT_CENTER,
@@ -111,17 +121,17 @@ fn metronome(p: &egui::Painter, r: Rect, app: &Tm2077App) {
     let m = &app.metronome;
 
     // "TEMPO" + metronome icon.
-    p.text(pos2(r.min.x + r.width() * 0.66, r.min.y + r.height() * 0.23), Align2::LEFT_CENTER, "TEMPO", FontId::proportional(11.0), Palette::LCD_INK);
-    glyphs::metronome(p, pos2(r.min.x + r.width() * 0.68, r.min.y + r.height() * 0.42), r.height() * 0.09, Palette::LCD_INK);
+    p.text(pos2(r.min.x + r.width() * 0.66, r.min.y + r.height() * 0.19), Align2::LEFT_CENTER, "TEMPO", FontId::proportional(11.0), Palette::LCD_INK);
+    glyphs::metronome(p, pos2(r.min.x + r.width() * 0.68, r.min.y + r.height() * 0.30), r.height() * 0.09, Palette::LCD_INK);
 
-    // Tempo number (7-seg), large.
-    let bpm_rect = rel_rect(r, 0.74, 0.20, 0.97, 0.44);
+    // Tempo number (7-seg).
+    let bpm_rect = shrunk(rel_rect(r, 0.74, 0.15, 0.97, 0.39), SEG_SCALE);
     seg::number(p, bpm_rect, m.bpm, 3, Palette::LCD_INK, Palette::LCD_INK_DIM);
 
     // "BEAT" + beats-per-bar.
-    p.text(pos2(r.min.x + r.width() * 0.72, r.min.y + r.height() * 0.60), Align2::LEFT_CENTER, "BEAT", FontId::proportional(11.0), Palette::LCD_INK);
+    p.text(pos2(r.min.x + r.width() * 0.72, r.min.y + r.height() * 0.55), Align2::LEFT_CENTER, "BEAT", FontId::proportional(11.0), Palette::LCD_INK);
     // Two cells: BEAT goes up to 12, which a single cell would truncate to "2".
-    let beat_rect = rel_rect(r, 0.845, 0.52, 0.97, 0.72);
+    let beat_rect = shrunk(rel_rect(r, 0.845, 0.47, 0.97, 0.67), SEG_SCALE);
     seg::number(p, beat_rect, m.beats_per_bar, 2, Palette::LCD_INK, Palette::LCD_INK_DIM);
 
     // Running beat indicator dots along the bottom-right.
