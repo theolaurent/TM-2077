@@ -86,6 +86,56 @@ pub fn number(p: &egui::Painter, rect: Rect, value: u32, count: usize, ink: Colo
     }
 }
 
+/// Segments lit for a note letter A–G in a 14-segment layout (these letters need
+/// only the straight segments — no diagonals). Order:
+/// `[a, b, c, d, e, f, g1, g2, i, l]` where g1/g2 are the split middle bar and
+/// i/l are the upper/lower centre verticals.
+fn letter_segs(ch: char) -> Option<[bool; 10]> {
+    Some(match ch {
+        'A' => [true, true, true, false, true, true, true, true, false, false],
+        'B' => [true, true, true, true, false, false, false, true, true, true],
+        'C' => [true, false, false, true, true, true, false, false, false, false],
+        'D' => [true, true, true, true, false, false, false, false, true, true],
+        'E' => [true, false, false, true, true, true, true, false, false, false],
+        'F' => [true, false, false, false, true, true, true, false, false, false],
+        'G' => [true, false, true, true, true, true, false, true, false, false],
+        _ => return None,
+    })
+}
+
+/// Draw a note letter (A–G) as a 14-segment character filling `rect`, in the
+/// same tapered style as the 7-segment number cells.
+pub fn letter(p: &egui::Painter, rect: Rect, ch: char, ink: Color32) {
+    let Some(on) = letter_segs(ch) else {
+        return;
+    };
+    let (x0, y0, w, h) = (rect.min.x, rect.min.y, rect.width(), rect.height());
+    let th = w * 0.15;
+    let cx = x0 + w * 0.5;
+    let mid_y = y0 + h * 0.5;
+    let lh = w - th * 1.1; // full horizontal length
+    let gh = w * 0.5 - th * 0.85; // split-middle (g1/g2) length
+    let lv = h * 0.5 - th * 0.9; // vertical segment length
+
+    let segs: [(Vec<Pos2>, bool); 10] = [
+        (hseg(pos2(cx, y0 + th * 0.5), lh, th), on[0]),                // a
+        (vseg(pos2(x0 + w - th * 0.5, y0 + h * 0.25), lv, th), on[1]), // b
+        (vseg(pos2(x0 + w - th * 0.5, y0 + h * 0.75), lv, th), on[2]), // c
+        (hseg(pos2(cx, y0 + h - th * 0.5), lh, th), on[3]),            // d
+        (vseg(pos2(x0 + th * 0.5, y0 + h * 0.75), lv, th), on[4]),     // e
+        (vseg(pos2(x0 + th * 0.5, y0 + h * 0.25), lv, th), on[5]),     // f
+        (hseg(pos2(x0 + w * 0.25 + th * 0.15, mid_y), gh, th), on[6]), // g1
+        (hseg(pos2(x0 + w * 0.75 - th * 0.15, mid_y), gh, th), on[7]), // g2
+        (vseg(pos2(cx, y0 + h * 0.25), lv, th), on[8]),               // i
+        (vseg(pos2(cx, y0 + h * 0.75), lv, th), on[9]),               // l
+    ];
+    for (poly, lit) in segs {
+        if lit {
+            p.add(Shape::convex_polygon(poly, ink, Stroke::NONE));
+        }
+    }
+}
+
 fn hseg(c: Pos2, len: f32, th: f32) -> Vec<Pos2> {
     let (hl, ht) = (len * 0.5, th * 0.5);
     vec![

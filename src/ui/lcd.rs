@@ -62,22 +62,30 @@ fn tuner(p: &egui::Painter, r: Rect, app: &Tm2077App) {
         t.lcd_ink,
     );
 
-    // Note letter, upper-centre.
-    let note_c = pos2(r.center().x, r.min.y + r.height() * 0.30);
-    let note_size = r.height() * 0.23;
+    // Note letter as a 14-segment character — one cell, same size as the calib
+    // and BPM digits and aligned to their middle line.
+    let cell_gap = hz_rect.width() * 0.06 / 3.0;
+    let cell_w = (hz_rect.width() - cell_gap * 2.0) / 3.0;
+    let note_rect = Rect::from_center_size(
+        pos2(r.center().x, hz_rect.center().y),
+        vec2(cell_w, hz_rect.height()),
+    );
     if let Some(rd) = reading {
-        // Note names are ASCII ("A".."G", optionally "#"); take the letter
-        // without risking a panic on a bad byte boundary.
-        let letter = rd.name.get(0..1).unwrap_or(rd.name);
-        p.text(note_c, Align2::CENTER_CENTER, letter, FontId::proportional(note_size), t.lcd_ink);
-        if rd.name.ends_with('#') {
-            glyphs::sharp(p, note_c + vec2(note_size * 0.55, -note_size * 0.28), note_size * 0.23, t.lcd_ink);
+        if let Some(ch) = rd.name.chars().next() {
+            seg::letter(p, note_rect, ch, t.lcd_ink);
         }
-        // Quarter-tone (24-TET) accidental.
-        let q_at = note_c + vec2(note_size * 0.55, -note_size * 0.28);
+        // Accidental to the upper-right of the note.
+        let acc_c = pos2(
+            note_rect.max.x + note_rect.width() * 0.4,
+            note_rect.min.y + note_rect.height() * 0.22,
+        );
+        let acc_h = note_rect.height() * 0.2;
+        if rd.name.ends_with('#') {
+            glyphs::sharp(p, acc_c, acc_h, t.lcd_ink);
+        }
         match rd.quarter {
-            QuarterTone::HalfSharp => glyphs::half_sharp(p, q_at, note_size * 0.23, t.lcd_ink),
-            QuarterTone::HalfFlat => glyphs::half_flat(p, q_at, note_size * 0.23, t.lcd_ink),
+            QuarterTone::HalfSharp => glyphs::half_sharp(p, acc_c, acc_h, t.lcd_ink),
+            QuarterTone::HalfFlat => glyphs::half_flat(p, acc_c, acc_h, t.lcd_ink),
             QuarterTone::None => {}
         }
     }
