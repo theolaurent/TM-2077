@@ -11,12 +11,13 @@ use wasm_bindgen_futures::{JsFuture, spawn_local};
 use web_sys::{AnalyserNode, AudioContext, MediaStream, MediaStreamConstraints};
 
 use crate::audio::pitch::{PitchTracker, WINDOW};
-use crate::note::{NoteReading, Scale};
+use crate::note::{NoteReading, Scale, Transposition};
 
 pub struct WebTuner {
     enabled: bool,
     a4: f32,
     scale: Scale,
+    transpose: Transposition,
     reading: Option<NoteReading>,
     analyser: Rc<RefCell<Option<AnalyserNode>>>,
     ctx: Option<AudioContext>,
@@ -31,6 +32,7 @@ impl WebTuner {
             enabled: false,
             a4: 440.0,
             scale: Scale::default(),
+            transpose: Transposition::default(),
             reading: None,
             analyser: Rc::new(RefCell::new(None)),
             ctx: None,
@@ -53,6 +55,10 @@ impl WebTuner {
 
     pub fn set_scale(&mut self, scale: Scale) {
         self.scale = scale;
+    }
+
+    pub fn set_transpose(&mut self, transpose: Transposition) {
+        self.transpose = transpose;
     }
 
     pub fn reading(&self) -> Option<NoteReading> {
@@ -98,7 +104,7 @@ impl WebTuner {
         {
             self.reading = tracker
                 .detect(&self.buf)
-                .and_then(|f| NoteReading::from_freq(f, self.a4, self.scale));
+                .and_then(|f| NoteReading::from_freq(f, self.a4, self.scale, self.transpose));
         }
     }
 

@@ -31,6 +31,10 @@ impl Tuner {
         self.backend.set_scale(scale);
     }
 
+    pub fn set_transpose(&mut self, transpose: crate::note::Transposition) {
+        self.backend.set_transpose(transpose);
+    }
+
     pub fn reading(&self) -> Option<NoteReading> {
         self.backend.reading()
     }

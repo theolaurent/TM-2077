@@ -47,6 +47,10 @@ impl AudioEngine {
         self.tuner.set_scale(scale);
     }
 
+    pub fn tuner_set_transpose(&mut self, transpose: crate::note::Transposition) {
+        self.tuner.set_transpose(transpose);
+    }
+
     pub fn tuner_reading(&self) -> Option<NoteReading> {
         self.tuner.reading()
     }

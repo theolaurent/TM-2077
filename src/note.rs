@@ -20,6 +20,32 @@ pub enum Scale {
     QuarterTone,
 }
 
+/// Instrument transposition: the tuner shows the *written* note for a
+/// transposing instrument (written = concert pitch + this many semitones).
+#[derive(Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+pub enum Transposition {
+    /// Concert pitch (C instruments), no transposition.
+    #[default]
+    Concert,
+    /// B♭ instruments (clarinet, trumpet, tenor/soprano sax): +2.
+    BFlat,
+    /// E♭ instruments (alto/baritone sax): +9.
+    EFlat,
+    /// F instruments (French horn, English horn): +7.
+    F,
+}
+
+impl Transposition {
+    fn semitones(self) -> i32 {
+        match self {
+            Transposition::Concert => 0,
+            Transposition::BFlat => 2,
+            Transposition::EFlat => 9,
+            Transposition::F => 7,
+        }
+    }
+}
+
 /// A quarter-tone accidental on top of `name` (QuarterTone scale only).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
 pub enum QuarterTone {
@@ -48,13 +74,14 @@ pub struct NoteReading {
 
 impl NoteReading {
     /// Convert a frequency to the nearest pitch of `scale`, given an `a4`
-    /// reference (e.g. 440).
-    pub fn from_freq(freq: f32, a4: f32, scale: Scale) -> Option<Self> {
+    /// reference (e.g. 440) and instrument `transpose`. For a transposing
+    /// instrument the returned note is the *written* note.
+    pub fn from_freq(freq: f32, a4: f32, scale: Scale, transpose: Transposition) -> Option<Self> {
         if !freq.is_finite() || freq <= 0.0 || !a4.is_finite() || a4 <= 0.0 {
             return None;
         }
-        // MIDI note number (A4 = 69), fractional.
-        let midi = 69.0 + 12.0 * (freq / a4).log2();
+        // MIDI note number (A4 = 69), fractional; shift to the written pitch.
+        let midi = 69.0 + 12.0 * (freq / a4).log2() + transpose.semitones() as f32;
         match scale {
             Scale::Chromatic => Self::at_semitone(freq, midi, midi.round() as i32),
             Scale::Guitar => Self::guitar(freq, midi),
@@ -121,7 +148,7 @@ mod tests {
 
     #[test]
     fn a4_is_exact() {
-        let r = NoteReading::from_freq(440.0, 440.0, Scale::Chromatic).unwrap();
+        let r = NoteReading::from_freq(440.0, 440.0, Scale::Chromatic, Transposition::Concert).unwrap();
         assert_eq!(r.name, "A");
         assert_eq!(r.octave, 4);
         assert!(r.cents.abs() < 0.01);
@@ -130,7 +157,7 @@ mod tests {
 
     #[test]
     fn middle_c() {
-        let r = NoteReading::from_freq(261.63, 440.0, Scale::Chromatic).unwrap();
+        let r = NoteReading::from_freq(261.63, 440.0, Scale::Chromatic, Transposition::Concert).unwrap();
         assert_eq!(r.name, "C");
         assert_eq!(r.octave, 4);
         assert!(r.cents.abs() < 1.0);
@@ -140,7 +167,7 @@ mod tests {
     fn slightly_flat() {
         // ~30 cents flat of A4.
         let f = 440.0 * 2f32.powf(-30.0 / 1200.0);
-        let r = NoteReading::from_freq(f, 440.0, Scale::Chromatic).unwrap();
+        let r = NoteReading::from_freq(f, 440.0, Scale::Chromatic, Transposition::Concert).unwrap();
         assert_eq!(r.name, "A");
         assert!(r.cents < -25.0 && r.cents > -35.0);
         assert!(!r.in_tune());
@@ -149,7 +176,7 @@ mod tests {
     #[test]
     fn guitar_keeps_string_notes() {
         // A2 (110 Hz) is an open string — snaps to A, in tune.
-        let r = NoteReading::from_freq(110.0, 440.0, Scale::Guitar).unwrap();
+        let r = NoteReading::from_freq(110.0, 440.0, Scale::Guitar, Transposition::Concert).unwrap();
         assert_eq!(r.name, "A");
         assert!(r.cents.abs() < 1.0);
     }
@@ -157,7 +184,7 @@ mod tests {
     #[test]
     fn guitar_snaps_c_to_b() {
         // C4 isn't a string; the nearest string note is B (a semitone below).
-        let r = NoteReading::from_freq(261.63, 440.0, Scale::Guitar).unwrap();
+        let r = NoteReading::from_freq(261.63, 440.0, Scale::Guitar, Transposition::Concert).unwrap();
         assert_eq!(r.name, "B");
         assert!((r.cents - 100.0).abs() < 2.0);
     }
@@ -166,7 +193,7 @@ mod tests {
     fn quarter_tone_half_sharp() {
         // +50 cents above A4 → A half-sharp.
         let f = 440.0 * 2f32.powf(0.5 / 12.0);
-        let r = NoteReading::from_freq(f, 440.0, Scale::QuarterTone).unwrap();
+        let r = NoteReading::from_freq(f, 440.0, Scale::QuarterTone, Transposition::Concert).unwrap();
         assert_eq!(r.name, "A");
         assert_eq!(r.quarter, QuarterTone::HalfSharp);
         assert!(r.cents.abs() < 1.0);
@@ -176,9 +203,18 @@ mod tests {
     fn quarter_tone_half_flat() {
         // Quarter tone between A# and B → B half-flat.
         let f = 440.0 * 2f32.powf(1.5 / 12.0);
-        let r = NoteReading::from_freq(f, 440.0, Scale::QuarterTone).unwrap();
+        let r = NoteReading::from_freq(f, 440.0, Scale::QuarterTone, Transposition::Concert).unwrap();
         assert_eq!(r.name, "B");
         assert_eq!(r.quarter, QuarterTone::HalfFlat);
         assert!(r.cents.abs() < 1.0);
+    }
+
+    #[test]
+    fn bflat_transposes_up_a_tone() {
+        // Concert A4 on a B♭ instrument reads as written B4.
+        let r = NoteReading::from_freq(440.0, 440.0, Scale::Chromatic, Transposition::BFlat).unwrap();
+        assert_eq!(r.name, "B");
+        assert_eq!(r.octave, 4);
+        assert!(r.cents.abs() < 0.01);
     }
 }

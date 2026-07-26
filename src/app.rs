@@ -5,7 +5,7 @@ use rpds::Vector;
 use serde::{Deserialize, Serialize};
 
 use crate::audio::AudioEngine;
-use crate::note::{NoteReading, Scale};
+use crate::note::{NoteReading, Scale, Transposition};
 use crate::{theme, ui};
 
 pub struct TunerState {
@@ -13,6 +13,8 @@ pub struct TunerState {
     pub a4: f32,
     /// Which scale the tuner snaps readings to.
     pub scale: Scale,
+    /// Instrument transposition (shows the written note).
+    pub transpose: Transposition,
     /// Latest pitch reading, if a note is currently detected.
     pub reading: Option<NoteReading>,
 }
@@ -39,6 +41,8 @@ struct Settings {
     theme: theme::Theme,
     #[serde(default)]
     scale: Scale,
+    #[serde(default)]
+    transpose: Transposition,
 }
 
 fn default_tap_count() -> u32 {
@@ -55,6 +59,7 @@ impl Default for Settings {
             tap_count: default_tap_count(),
             theme: theme::Theme::default(),
             scale: Scale::default(),
+            transpose: Transposition::default(),
         }
     }
 }
@@ -87,6 +92,7 @@ impl Tm2077App {
             tuner: TunerState {
                 a4: s.a4,
                 scale: s.scale,
+                transpose: s.transpose,
                 reading: None,
             },
             metronome: MetronomeState {
@@ -112,6 +118,7 @@ impl Tm2077App {
             tap_count: self.tap_count,
             theme: self.theme,
             scale: self.tuner.scale,
+            transpose: self.tuner.transpose,
         }
     }
 
@@ -198,6 +205,16 @@ impl Tm2077App {
                     ui.selectable_value(&mut self.tuner.scale, Scale::Chromatic, "Chromatic");
                     ui.selectable_value(&mut self.tuner.scale, Scale::Guitar, "Guitar");
                     ui.selectable_value(&mut self.tuner.scale, Scale::QuarterTone, "Quarter");
+                });
+
+                ui.add_space(8.0);
+                ui.label("TRANSPOSITION");
+                ui.horizontal_wrapped(|ui| {
+                    let tr = &mut self.tuner.transpose;
+                    ui.selectable_value(tr, Transposition::Concert, "Concert");
+                    ui.selectable_value(tr, Transposition::BFlat, "Bb");
+                    ui.selectable_value(tr, Transposition::EFlat, "Eb");
+                    ui.selectable_value(tr, Transposition::F, "F");
                 });
 
                 ui.add_space(8.0);
@@ -290,6 +307,7 @@ impl eframe::App for Tm2077App {
         self.audio.tuner_set_enabled(self.tuner_on);
         self.audio.tuner_set_a4(self.tuner.a4);
         self.audio.tuner_set_scale(self.tuner.scale);
+        self.audio.tuner_set_transpose(self.tuner.transpose);
 
         // Now that this frame's settings are live, act on any user gesture — so a
         // click that just enabled the tuner unlocks audio and prompts for the mic.
