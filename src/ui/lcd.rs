@@ -197,16 +197,32 @@ fn metronome(p: &egui::Painter, r: Rect, app: &Tm2077App) {
     let t = theme::palette(p);
     let m = &app.metronome;
 
-    // "TEMPO" label.
-    p.text(pos2(r.min.x + r.width() * 0.66, r.min.y + r.height() * 0.19), Align2::LEFT_CENTER, "TEMPO", FontId::proportional(11.0), t.lcd_ink);
-
-    // Tempo number (7-seg).
+    // Tempo number (7-seg) with a "BPM" label — same gap / middle-line
+    // alignment as the other readouts.
     let bpm_rect = shrunk(rel_rect(r, 0.74, 0.15, 0.97, 0.39), SEG_SCALE);
     seg::number(p, bpm_rect, m.bpm, 3, t.lcd_ink, t.lcd_ink_dim);
+    p.text(
+        pos2(bpm_rect.min.x - 6.0, bpm_rect.center().y),
+        Align2::RIGHT_CENTER,
+        "BPM",
+        FontId::proportional(11.0),
+        t.lcd_ink,
+    );
 
-    // "BEAT" + beats-per-bar.
-    p.text(pos2(r.min.x + r.width() * 0.72, r.min.y + r.height() * 0.55), Align2::LEFT_CENTER, "BEAT", FontId::proportional(11.0), t.lcd_ink);
-    // Two cells: BEAT goes up to 12, which a single cell would truncate to "2".
-    let beat_rect = shrunk(rel_rect(r, 0.845, 0.47, 0.97, 0.67), SEG_SCALE);
+    // "BEAT" + beats-per-bar: right-aligned to the BPM display and tucked just
+    // below it. Two cells: BEAT goes up to 12 (a single cell would truncate).
+    let beat_w = bpm_rect.width() * 0.40;
+    let beat_h = bpm_rect.height() * 0.60;
+    let beat_rect = Rect::from_min_size(
+        pos2(bpm_rect.max.x - beat_w, bpm_rect.max.y + r.height() * 0.03),
+        vec2(beat_w, beat_h),
+    );
     seg::number(p, beat_rect, m.beats_per_bar, 2, t.lcd_ink, t.lcd_ink_dim);
+    p.text(
+        pos2(beat_rect.min.x - 6.0, beat_rect.center().y),
+        Align2::RIGHT_CENTER,
+        "BEAT",
+        FontId::proportional(11.0),
+        t.lcd_ink,
+    );
 }

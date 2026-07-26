@@ -1,5 +1,5 @@
 //! Small vector glyphs drawn with the painter (the default font lacks musical
-//! symbols): rocker arrows and ♭ / ♯ accidentals.
+//! symbols): rocker arrows, ♭ / ♯ accidentals, and a gear.
 
 use egui::{Color32, Pos2, Shape, Stroke, pos2, vec2};
 
