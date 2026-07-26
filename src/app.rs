@@ -137,10 +137,11 @@ impl eframe::App for Tm2077App {
             ui.ctx().request_repaint();
         }
 
-        // Any click counts as a user gesture (needed to unlock web audio).
-        if ui.input(|i| i.pointer.any_click()) {
-            self.audio.on_user_gesture();
-        }
+        // Any click counts as a user gesture (needed to unlock web audio / mic).
+        // Handled at the end of the frame, *after* controls and settings run, so
+        // the same click that turns the tuner on requests the mic in that gesture
+        // instead of needing a second click.
+        let clicked = ui.input(|i| i.pointer.any_click());
 
         // Pull the latest audio state into the display model.
         self.audio.poll();
@@ -164,6 +165,12 @@ impl eframe::App for Tm2077App {
         self.audio.tuner_set_a4(self.tuner.a4);
         self.audio
             .set_reference_tone(self.sound_on.then_some(self.tuner.a4));
+
+        // Now that this frame's settings are live, act on any user gesture — so a
+        // click that just enabled the tuner unlocks audio and prompts for the mic.
+        if clicked {
+            self.audio.on_user_gesture();
+        }
     }
 
     fn save(&mut self, storage: &mut dyn eframe::Storage) {
