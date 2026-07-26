@@ -78,9 +78,10 @@ fn needle_meter(p: &egui::Painter, r: Rect, cents: Option<f32>, active: bool) {
     let p = p.with_clip_rect(r);
     let h = r.height();
     let cx = r.center().x;
-    // Pivot sits below the LCD so the visible arc is a shallow analog-meter curve.
-    let pivot = pos2(cx, r.max.y + h * 0.62);
-    let radius = h * 1.28;
+    // Pivot sits below the LCD so the visible arc is a shallow analog-meter
+    // curve. The offset places the arc vertically; the radius sets its size.
+    let pivot = pos2(cx, r.max.y + h * 0.57);
+    let radius = h * 1.05;
     let max = 32f32.to_radians();
     let dir = |ang: f32| vec2(ang.sin(), -ang.cos());
 
@@ -92,21 +93,12 @@ fn needle_meter(p: &egui::Painter, r: Rect, cents: Option<f32>, active: bool) {
         p.circle_filled(pivot + dir(ang) * radius, rad, Palette::LCD_INK);
     }
 
-    // Fixed triangle reference markers (left, centre, right).
-    for frac in [-0.5f32, 0.0, 0.5] {
-        glyphs::marker_down(&p, pivot + dir(frac * max) * (radius + 11.0), 5.5, Palette::LCD_INK);
-    }
+    // Fixed centre reference marker.
+    glyphs::marker_down(&p, pivot + dir(0.0) * (radius + 11.0), 5.5, Palette::LCD_INK);
 
     // Scale end labels near the arc ends.
     p.text(pivot + dir(-max) * radius + vec2(-2.0, 10.0), Align2::CENTER_CENTER, "-50", FontId::proportional(11.0), Palette::LCD_INK);
     p.text(pivot + dir(max) * radius + vec2(2.0, 10.0), Align2::CENTER_CENTER, "+50", FontId::proportional(11.0), Palette::LCD_INK);
-
-    // Hatched fan at the bottom-centre where the needle emerges.
-    let base = pos2(cx, r.max.y - 1.0);
-    for k in -4..=4 {
-        let ang = (k as f32) * 3.4f32.to_radians();
-        p.line_segment([base, base + dir(ang) * h * 0.14], Stroke::new(1.3, Palette::LCD_INK));
-    }
 
     // The needle (base off-screen at the pivot; clip hides the part below the LCD).
     let c = cents.unwrap_or(0.0).clamp(-50.0, 50.0) / 50.0;
@@ -120,9 +112,8 @@ fn needle_meter(p: &egui::Painter, r: Rect, cents: Option<f32>, active: bool) {
 fn metronome(p: &egui::Painter, r: Rect, app: &Tm2077App) {
     let m = &app.metronome;
 
-    // "TEMPO" + metronome icon.
+    // "TEMPO" label.
     p.text(pos2(r.min.x + r.width() * 0.66, r.min.y + r.height() * 0.19), Align2::LEFT_CENTER, "TEMPO", FontId::proportional(11.0), Palette::LCD_INK);
-    glyphs::metronome(p, pos2(r.min.x + r.width() * 0.68, r.min.y + r.height() * 0.30), r.height() * 0.09, Palette::LCD_INK);
 
     // Tempo number (7-seg).
     let bpm_rect = shrunk(rel_rect(r, 0.74, 0.15, 0.97, 0.39), SEG_SCALE);
