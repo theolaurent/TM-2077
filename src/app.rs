@@ -273,7 +273,9 @@ impl eframe::App for Tm2077App {
         // (beat dots / needle). Otherwise let egui idle and repaint on input,
         // saving CPU/GPU — especially in a backgrounded web tab. The metronome
         // audio is unaffected; it runs on the audio thread.
-        if self.metronome.running || self.tuner_on {
+        // Repaint continuously while animating, and while a pointer button is
+        // held so the rockers' press-and-hold auto-repeat keeps ticking.
+        if self.metronome.running || self.tuner_on || ui.input(|i| i.pointer.any_down()) {
             ui.ctx().request_repaint();
         }
 

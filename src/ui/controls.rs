@@ -14,6 +14,47 @@ pub fn draw(ui: &mut egui::Ui, p: &egui::Painter, d: Rect, _lcd: Rect, app: &mut
     centre(ui, p, d, app);
 }
 
+/// Fires once when a button is pressed, then repeatedly while it is held (after
+/// a short delay) — used to make the rockers auto-repeat. The hold is latched
+/// when the press starts on the button, then kept alive by the *global* pointer
+/// state until release (egui drops a click-only widget's own "down" flag once it
+/// treats the press as a drag).
+fn repeat_fire(ui: &egui::Ui, resp: &egui::Response) -> bool {
+    const DELAY: f64 = 0.35; // hold time before auto-repeat starts
+    const INTERVAL: f64 = 0.05; // repeat period once going
+    let id = resp.id.with("repeat");
+    let (primary_down, now) = ui.input(|i| (i.pointer.primary_down(), i.time));
+    let state = ui.ctx().memory(|m| m.data.get_temp::<(f64, f64)>(id));
+
+    if !primary_down {
+        if state.is_some() {
+            ui.ctx().memory_mut(|m| m.data.remove::<(f64, f64)>(id));
+        }
+        return false;
+    }
+    ui.ctx().request_repaint();
+
+    match state {
+        // Begin a hold only if the press actually started on this button.
+        None => {
+            if resp.is_pointer_button_down_on() {
+                ui.ctx().memory_mut(|m| m.data.insert_temp(id, (now, now)));
+                true
+            } else {
+                false
+            }
+        }
+        // Latched: repeat purely on the clock until the button is released.
+        Some((press, last_fire)) => {
+            let fire = now - press >= DELAY && now - last_fire >= INTERVAL;
+            if fire {
+                ui.ctx().memory_mut(|m| m.data.insert_temp(id, (press, now)));
+            }
+            fire
+        }
+    }
+}
+
 fn left_column(ui: &mut egui::Ui, p: &egui::Painter, d: Rect, app: &mut Tm2077App) {
     // TUNER toggle pill (label inside; whole button lights amber when on).
     let tuner_pill = rel_rect(d, 0.035, 0.06, 0.195, 0.15);
@@ -25,10 +66,10 @@ fn left_column(ui: &mut egui::Ui, p: &egui::Painter, d: Rect, app: &mut Tm2077Ap
     label(p, pos2(d.min.x + d.width() * 0.115, d.min.y + d.height() * 0.22), Align2::CENTER_CENTER, "CALIB · NOTE", 10.0, false);
     let calib = rel_rect(d, 0.075, 0.255, 0.155, 0.47);
     let (up, dn) = rocker(ui, p, calib, "calib");
-    if up.clicked() {
+    if repeat_fire(ui, &up) {
         app.tuner.a4 = (app.tuner.a4 + 1.0).clamp(410.0, 480.0);
     }
-    if dn.clicked() {
+    if repeat_fire(ui, &dn) {
         app.tuner.a4 = (app.tuner.a4 - 1.0).clamp(410.0, 480.0);
     }
 }
@@ -46,17 +87,17 @@ fn right_column(ui: &mut egui::Ui, p: &egui::Painter, d: Rect, app: &mut Tm2077A
     let beat = rel_rect(d, 0.815, 0.27, 0.875, 0.49);
     let tempo = rel_rect(d, 0.895, 0.27, 0.955, 0.49);
     let (bu, bd) = rocker(ui, p, beat, "beat");
-    if bu.clicked() {
+    if repeat_fire(ui, &bu) {
         app.metronome.beats_per_bar = (app.metronome.beats_per_bar + 1).min(12);
     }
-    if bd.clicked() {
+    if repeat_fire(ui, &bd) {
         app.metronome.beats_per_bar = app.metronome.beats_per_bar.saturating_sub(1).max(1);
     }
     let (tu, td) = rocker(ui, p, tempo, "tempo");
-    if tu.clicked() {
+    if repeat_fire(ui, &tu) {
         app.metronome.bpm = (app.metronome.bpm + 1).min(300);
     }
-    if td.clicked() {
+    if repeat_fire(ui, &td) {
         app.metronome.bpm = app.metronome.bpm.saturating_sub(1).max(30);
     }
 
