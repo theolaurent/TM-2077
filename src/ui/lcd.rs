@@ -5,6 +5,7 @@ use egui::{Align2, Color32, CornerRadius, FontId, Rect, Stroke, StrokeKind, pos2
 
 use super::{fill_gradient_v, glyphs, rel_rect, seg};
 use crate::app::Tm2077App;
+use crate::note::QuarterTone;
 use crate::theme;
 
 /// Shrink factor applied to the 7-segment readouts (calib / BPM / beat).
@@ -71,6 +72,13 @@ fn tuner(p: &egui::Painter, r: Rect, app: &Tm2077App) {
         p.text(note_c, Align2::CENTER_CENTER, letter, FontId::proportional(note_size), t.lcd_ink);
         if rd.name.ends_with('#') {
             glyphs::sharp(p, note_c + vec2(note_size * 0.55, -note_size * 0.28), note_size * 0.23, t.lcd_ink);
+        }
+        // Quarter-tone (24-TET) accidental.
+        let q_at = note_c + vec2(note_size * 0.55, -note_size * 0.28);
+        match rd.quarter {
+            QuarterTone::HalfSharp => glyphs::half_sharp(p, q_at, note_size * 0.23, t.lcd_ink),
+            QuarterTone::HalfFlat => glyphs::half_flat(p, q_at, note_size * 0.23, t.lcd_ink),
+            QuarterTone::None => {}
         }
     }
 }

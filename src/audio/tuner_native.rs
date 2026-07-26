@@ -8,13 +8,14 @@ use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use cpal::{FromSample, Sample, SizedSample};
 
 use crate::audio::pitch::{PitchTracker, WINDOW};
-use crate::note::NoteReading;
+use crate::note::{NoteReading, Scale};
 
 const RING_CAP: usize = WINDOW * 2;
 
 pub struct NativeTuner {
     enabled: bool,
     a4: f32,
+    scale: Scale,
     reading: Option<NoteReading>,
     ring: Arc<Mutex<Vec<f32>>>,
     stream: Option<cpal::Stream>,
@@ -27,6 +28,7 @@ impl NativeTuner {
         Self {
             enabled: false,
             a4: 440.0,
+            scale: Scale::default(),
             reading: None,
             ring: Arc::new(Mutex::new(Vec::with_capacity(RING_CAP))),
             stream: None,
@@ -44,6 +46,10 @@ impl NativeTuner {
 
     pub fn set_a4(&mut self, a4: f32) {
         self.a4 = a4;
+    }
+
+    pub fn set_scale(&mut self, scale: Scale) {
+        self.scale = scale;
     }
 
     pub fn reading(&self) -> Option<NoteReading> {
@@ -71,7 +77,7 @@ impl NativeTuner {
             };
             self.reading = tracker
                 .detect(&buf)
-                .and_then(|f| NoteReading::from_freq(f, self.a4));
+                .and_then(|f| NoteReading::from_freq(f, self.a4, self.scale));
         }
     }
 

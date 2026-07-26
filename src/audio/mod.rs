@@ -43,6 +43,10 @@ impl AudioEngine {
         self.tuner.set_a4(a4);
     }
 
+    pub fn tuner_set_scale(&mut self, scale: crate::note::Scale) {
+        self.tuner.set_scale(scale);
+    }
+
     pub fn tuner_reading(&self) -> Option<NoteReading> {
         self.tuner.reading()
     }

@@ -75,20 +75,32 @@ pub fn marker_down(p: &egui::Painter, c: Pos2, size: f32, color: Color32) {
 /// with a hollow bowl that has calligraphic weight — the loop swells at its
 /// belly and tapers where it meets the stem, enclosing an open hole.
 pub fn flat(p: &egui::Painter, c: Pos2, h: f32, color: Color32) {
+    flat_bowl(p, c, h, color, 1.0);
+}
+
+/// A half-flat (demiflat): the flat sign mirrored horizontally (bowl on the
+/// left, stem on the right).
+pub fn half_flat(p: &egui::Painter, c: Pos2, h: f32, color: Color32) {
+    flat_bowl(p, c, h, color, -1.0);
+}
+
+/// The flat glyph, with `sign` = 1.0 for a normal flat or -1.0 for a mirrored
+/// (half-flat) one.
+fn flat_bowl(p: &egui::Painter, c: Pos2, h: f32, color: Color32, sign: f32) {
     let w = h * 0.85;
     let stem_w = (h * 0.15).max(1.1);
-    let stem_x = c.x - w * 0.3;
+    let stem_x = c.x - sign * w * 0.3;
     // Tall, thin vertical stem.
     p.line_segment([pos2(stem_x, c.y - h), pos2(stem_x, c.y + h * 0.9)], Stroke::new(stem_w, color));
 
-    // Bowl outline as a cubic bézier from the mid-stem, out to the right and
-    // back to a point low on the stem. Sampled into overlapping dots whose
-    // radius swells at the belly and tapers to the stem, so the loop is heavier
-    // in the middle and leaves an open hole against the stem.
+    // Bowl outline as a cubic bézier from the mid-stem, out to the side and back
+    // to a point low on the stem. Sampled into overlapping dots whose radius
+    // swells at the belly and tapers to the stem, so the loop is heavier in the
+    // middle and leaves an open hole against the stem.
     let (p0, p1, p2, p3) = (
         pos2(stem_x, c.y - h * 0.1),
-        pos2(stem_x + w * 1.15, c.y - h * 0.15),
-        pos2(stem_x + w * 0.95, c.y + h * 0.55),
+        pos2(stem_x + sign * w * 1.15, c.y - h * 0.15),
+        pos2(stem_x + sign * w * 0.95, c.y + h * 0.55),
         pos2(stem_x, c.y + h * 0.9),
     );
     let (r_min, r_max) = (stem_w * 0.3, stem_w * 0.8);
@@ -123,6 +135,20 @@ pub fn sharp(p: &egui::Painter, c: Pos2, h: f32, color: Color32) {
     for dy in [-h * 0.36, h * 0.36] {
         p.line_segment(
             [pos2(c.x - w, c.y + dy + h * 0.16), pos2(c.x + w, c.y + dy - h * 0.16)],
+            h_stroke,
+        );
+    }
+}
+
+/// A half-sharp (demisharp): the sharp sign with a single (central) vertical bar.
+pub fn half_sharp(p: &egui::Painter, c: Pos2, h: f32, color: Color32) {
+    let w = h * 0.28;
+    let v_stroke = Stroke::new((h * 0.11).max(1.0), color);
+    let h_stroke = Stroke::new((h * 0.30).max(1.8), color);
+    p.line_segment([pos2(c.x, c.y - h * 1.05), pos2(c.x, c.y + h * 1.05)], v_stroke);
+    for dy in [-h * 0.36, h * 0.36] {
+        p.line_segment(
+            [pos2(c.x - w, c.y + dy + h * 0.09), pos2(c.x + w, c.y + dy - h * 0.09)],
             h_stroke,
         );
     }

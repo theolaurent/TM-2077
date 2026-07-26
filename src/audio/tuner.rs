@@ -27,6 +27,10 @@ impl Tuner {
         self.backend.set_a4(a4);
     }
 
+    pub fn set_scale(&mut self, scale: crate::note::Scale) {
+        self.backend.set_scale(scale);
+    }
+
     pub fn reading(&self) -> Option<NoteReading> {
         self.backend.reading()
     }
