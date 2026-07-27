@@ -75,7 +75,11 @@ fn paint_body(p: &egui::Painter, rect: Rect) {
 /// The three tuning LEDs (♭ flat · in-tune · ♯ sharp) above the LCD.
 fn leds(p: &egui::Painter, d: Rect, app: &Tm2077App) {
     let t = theme::palette(p);
-    let reading = if app.tuner_on { app.tuner.reading } else { None };
+    let reading = if app.tuner_on {
+        app.tuner.reading
+    } else {
+        None
+    };
     let cents = reading.map(|r| r.cents);
     let flat = matches!(cents, Some(c) if c < -4.0);
     let sharp = matches!(cents, Some(c) if c > 4.0);
@@ -96,7 +100,11 @@ fn leds(p: &egui::Painter, d: Rect, app: &Tm2077App) {
 
 fn led(p: &egui::Painter, c: Pos2, on: Color32, off: Color32, lit: bool) {
     if lit {
-        p.circle_filled(c, 11.0, Color32::from_rgba_unmultiplied(on.r(), on.g(), on.b(), 55));
+        p.circle_filled(
+            c,
+            11.0,
+            Color32::from_rgba_unmultiplied(on.r(), on.g(), on.b(), 55),
+        );
     }
     p.circle_filled(c, 6.5, if lit { on } else { off });
     p.circle_stroke(c, 6.5, Stroke::new(1.0, Color32::from_black_alpha(90)));
@@ -132,7 +140,12 @@ pub(crate) fn icon_button(ui: &mut Ui, p: &egui::Painter, rect: Rect, tag: &str)
         (t.btn, t.btn_lo)
     };
     fill_gradient_v(p, rect, top, bot, 6);
-    p.rect_stroke(rect, CornerRadius::same(6), Stroke::new(1.0, t.body_edge_lo), StrokeKind::Inside);
+    p.rect_stroke(
+        rect,
+        CornerRadius::same(6),
+        Stroke::new(1.0, t.body_edge_lo),
+        StrokeKind::Inside,
+    );
     resp
 }
 
@@ -152,9 +165,20 @@ pub(crate) fn pill(ui: &mut Ui, p: &egui::Painter, rect: Rect, label: &str, on: 
         (t.btn, t.btn_lo)
     };
     fill_gradient_v_cr(p, rect, top, bot, CornerRadius::same(r));
-    p.rect_stroke(rect, CornerRadius::same(r), Stroke::new(1.0, t.body_edge_lo), StrokeKind::Inside);
+    p.rect_stroke(
+        rect,
+        CornerRadius::same(r),
+        Stroke::new(1.0, t.body_edge_lo),
+        StrokeKind::Inside,
+    );
     let col = if on { t.bezel } else { t.btn_label };
-    p.text(rect.center(), Align2::CENTER_CENTER, label, FontId::proportional(11.0), col);
+    p.text(
+        rect.center(),
+        Align2::CENTER_CENTER,
+        label,
+        FontId::proportional(11.0),
+        col,
+    );
     resp
 }
 
@@ -171,11 +195,21 @@ pub(crate) fn round_button(
     let rect = Rect::from_center_size(center, vec2(radius * 2.0, radius * 2.0));
     let resp = interact(ui, rect, label);
     let down = resp.is_pointer_button_down_on();
-    p.circle_filled(center + vec2(0.0, 2.0), radius, Color32::from_black_alpha(120));
+    p.circle_filled(
+        center + vec2(0.0, 2.0),
+        radius,
+        Color32::from_black_alpha(120),
+    );
     p.circle_filled(center, radius, if down { lo } else { base });
     p.circle_stroke(center, radius, Stroke::new(1.5, lo));
     if !label.is_empty() {
-        p.text(center, Align2::CENTER_CENTER, label, FontId::proportional(11.0), Color32::WHITE);
+        p.text(
+            center,
+            Align2::CENTER_CENTER,
+            label,
+            FontId::proportional(11.0),
+            Color32::WHITE,
+        );
     }
     resp
 }
@@ -196,8 +230,19 @@ pub(crate) fn rocker(ui: &mut Ui, p: &egui::Painter, rect: Rect, id: &str) -> (R
             (t.btn, t.btn_lo)
         };
         fill_gradient_v(p, r, top, bot, 6);
-        p.rect_stroke(r, CornerRadius::same(6), Stroke::new(1.0, t.body_edge_lo), StrokeKind::Inside);
-        glyphs::arrow(p, r.center(), r.height().min(r.width()) * 0.28, up_arrow, t.btn_label);
+        p.rect_stroke(
+            r,
+            CornerRadius::same(6),
+            Stroke::new(1.0, t.body_edge_lo),
+            StrokeKind::Inside,
+        );
+        glyphs::arrow(
+            p,
+            r.center(),
+            r.height().min(r.width()) * 0.28,
+            up_arrow,
+            t.btn_label,
+        );
     }
     (up, dn)
 }
@@ -218,11 +263,23 @@ fn interact(ui: &mut Ui, rect: Rect, tag: &str) -> Response {
 // Painting primitives
 // ---------------------------------------------------------------------------
 
-pub(crate) fn fill_gradient_v(p: &egui::Painter, rect: Rect, top: Color32, bottom: Color32, radius: u8) {
+pub(crate) fn fill_gradient_v(
+    p: &egui::Painter,
+    rect: Rect,
+    top: Color32,
+    bottom: Color32,
+    radius: u8,
+) {
     fill_gradient_v_cr(p, rect, top, bottom, CornerRadius::same(radius));
 }
 
-pub(crate) fn fill_gradient_v_cr(p: &egui::Painter, rect: Rect, top: Color32, bottom: Color32, cr: CornerRadius) {
+pub(crate) fn fill_gradient_v_cr(
+    p: &egui::Painter,
+    rect: Rect,
+    top: Color32,
+    bottom: Color32,
+    cr: CornerRadius,
+) {
     use egui::epaint::{Mesh, Vertex, WHITE_UV};
     // Fill a rounded-rect mesh with a smooth vertical gradient (per-vertex
     // colour). A triangle fan from the centre fills the convex rounded shape, so
@@ -232,9 +289,17 @@ pub(crate) fn fill_gradient_v_cr(p: &egui::Painter, rect: Rect, top: Color32, bo
     let ring = rounded_rect_ring(rect, cr);
     let mut mesh = Mesh::default();
     let center = rect.center();
-    mesh.vertices.push(Vertex { pos: center, uv: WHITE_UV, color: col(center.y) });
+    mesh.vertices.push(Vertex {
+        pos: center,
+        uv: WHITE_UV,
+        color: col(center.y),
+    });
     for &pt in &ring {
-        mesh.vertices.push(Vertex { pos: pt, uv: WHITE_UV, color: col(pt.y) });
+        mesh.vertices.push(Vertex {
+            pos: pt,
+            uv: WHITE_UV,
+            color: col(pt.y),
+        });
     }
     let n = ring.len() as u32;
     for i in 0..n {
@@ -254,10 +319,38 @@ fn rounded_rect_ring(rect: Rect, cr: CornerRadius) -> Vec<Pos2> {
         (cr.sw as f32).min(max_r),
     );
     let mut pts = Vec::new();
-    arc(rect.min.x + nw, rect.min.y + nw, nw, PI, PI + FRAC_PI_2, &mut pts);
-    arc(rect.max.x - ne, rect.min.y + ne, ne, PI + FRAC_PI_2, 2.0 * PI, &mut pts);
-    arc(rect.max.x - se, rect.max.y - se, se, 0.0, FRAC_PI_2, &mut pts);
-    arc(rect.min.x + sw, rect.max.y - sw, sw, FRAC_PI_2, PI, &mut pts);
+    arc(
+        rect.min.x + nw,
+        rect.min.y + nw,
+        nw,
+        PI,
+        PI + FRAC_PI_2,
+        &mut pts,
+    );
+    arc(
+        rect.max.x - ne,
+        rect.min.y + ne,
+        ne,
+        PI + FRAC_PI_2,
+        2.0 * PI,
+        &mut pts,
+    );
+    arc(
+        rect.max.x - se,
+        rect.max.y - se,
+        se,
+        0.0,
+        FRAC_PI_2,
+        &mut pts,
+    );
+    arc(
+        rect.min.x + sw,
+        rect.max.y - sw,
+        sw,
+        FRAC_PI_2,
+        PI,
+        &mut pts,
+    );
     pts
 }
 

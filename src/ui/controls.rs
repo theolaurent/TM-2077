@@ -5,7 +5,7 @@
 use egui::{Align2, FontId, Rect, pos2, vec2};
 
 use super::{glyphs, icon_button, label, pill, rel_rect, rocker, round_button};
-use crate::app::{next_graduation, prev_graduation, Tm2077App};
+use crate::app::{Tm2077App, next_graduation, prev_graduation};
 use crate::theme;
 
 /// Side of the square rubber buttons (rocker arrows + gear), as a fraction of
@@ -66,7 +66,8 @@ fn repeat_fire(ui: &egui::Ui, resp: &egui::Response) -> bool {
         Some((press, last_fire)) => {
             let fire = now - press >= DELAY && now - last_fire >= INTERVAL;
             if fire {
-                ui.ctx().memory_mut(|m| m.data.insert_temp(id, (press, now)));
+                ui.ctx()
+                    .memory_mut(|m| m.data.insert_temp(id, (press, now)));
             }
             fire
         }
@@ -81,7 +82,14 @@ fn left_column(ui: &mut egui::Ui, p: &egui::Painter, d: Rect, app: &mut Tm2077Ap
     }
 
     // CALIB·NOTE rocker (A4 calibration).
-    label(p, pos2(d.min.x + d.width() * 0.115, d.min.y + d.height() * 0.24), Align2::CENTER_CENTER, "CALIB · NOTE", 10.0, false);
+    label(
+        p,
+        pos2(d.min.x + d.width() * 0.115, d.min.y + d.height() * 0.24),
+        Align2::CENTER_CENTER,
+        "CALIB · NOTE",
+        10.0,
+        false,
+    );
     let calib = sq_rocker(d, 0.115, 0.37);
     let (up, dn) = rocker(ui, p, calib, "calib");
     if repeat_fire(ui, &up) {
@@ -100,8 +108,22 @@ fn right_column(ui: &mut egui::Ui, p: &egui::Painter, d: Rect, app: &mut Tm2077A
     }
 
     // BEAT and TEMPO rockers, side by side.
-    label(p, pos2(d.min.x + d.width() * 0.85, d.min.y + d.height() * 0.24), Align2::CENTER_CENTER, "BEAT", 10.0, false);
-    label(p, pos2(d.min.x + d.width() * 0.925, d.min.y + d.height() * 0.24), Align2::CENTER_CENTER, "TEMPO", 10.0, false);
+    label(
+        p,
+        pos2(d.min.x + d.width() * 0.85, d.min.y + d.height() * 0.24),
+        Align2::CENTER_CENTER,
+        "BEAT",
+        10.0,
+        false,
+    );
+    label(
+        p,
+        pos2(d.min.x + d.width() * 0.925, d.min.y + d.height() * 0.24),
+        Align2::CENTER_CENTER,
+        "TEMPO",
+        10.0,
+        false,
+    );
     let beat = sq_rocker(d, 0.85, 0.37);
     let tempo = sq_rocker(d, 0.925, 0.37);
     let (bu, bd) = rocker(ui, p, beat, "beat");
@@ -132,7 +154,12 @@ fn right_column(ui: &mut egui::Ui, p: &egui::Painter, d: Rect, app: &mut Tm2077A
     let t = theme::palette(p);
     let gear_rect = sq(d, 0.925, 0.9);
     let resp = icon_button(ui, p, gear_rect, "settings");
-    glyphs::gear(p, gear_rect.center(), gear_rect.height() * 0.34, t.btn_label);
+    glyphs::gear(
+        p,
+        gear_rect.center(),
+        gear_rect.height() * 0.34,
+        t.btn_label,
+    );
     if resp.clicked() {
         app.settings_open = !app.settings_open;
     }
@@ -142,7 +169,14 @@ fn centre(ui: &mut egui::Ui, p: &egui::Painter, d: Rect, app: &mut Tm2077App) {
     let t = theme::palette(p);
     // TAP TEMPO (red round button).
     let tap_c = pos2(d.min.x + d.width() * 0.66, d.min.y + d.height() * 0.79);
-    label(p, pos2(tap_c.x, tap_c.y - d.height() * 0.135), Align2::CENTER_CENTER, "TAP TEMPO", 10.0, false);
+    label(
+        p,
+        pos2(tap_c.x, tap_c.y - d.height() * 0.135),
+        Align2::CENTER_CENTER,
+        "TAP TEMPO",
+        10.0,
+        false,
+    );
     let tap = round_button(ui, p, tap_c, d.height() * 0.085, "", t.tap, t.tap_lo);
     if tap.clicked() {
         let now = ui.input(|i| i.time);

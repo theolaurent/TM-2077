@@ -99,9 +99,7 @@ impl WebTuner {
             Err(_) => false,
         };
 
-        if got
-            && let Some(tracker) = self.tracker.as_mut()
-        {
+        if got && let Some(tracker) = self.tracker.as_mut() {
             self.reading = tracker
                 .detect(&self.buf)
                 .and_then(|f| NoteReading::from_freq(f, self.a4, self.scale, self.transpose));

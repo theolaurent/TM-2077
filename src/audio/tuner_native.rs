@@ -143,8 +143,8 @@ impl NativeTuner {
                         return;
                     };
                     for frame in data.chunks(channels) {
-                        let mono: f32 =
-                            frame.iter().map(|&s| f32::from_sample(s)).sum::<f32>() / channels as f32;
+                        let mono: f32 = frame.iter().map(|&s| f32::from_sample(s)).sum::<f32>()
+                            / channels as f32;
                         r.push(mono);
                     }
                     let len = r.len();

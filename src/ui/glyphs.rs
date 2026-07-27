@@ -91,7 +91,10 @@ fn flat_bowl(p: &egui::Painter, c: Pos2, h: f32, color: Color32, sign: f32) {
     let stem_w = (h * 0.15).max(1.1);
     let stem_x = c.x - sign * w * 0.3;
     // Tall, thin vertical stem.
-    p.line_segment([pos2(stem_x, c.y - h), pos2(stem_x, c.y + h * 0.9)], Stroke::new(stem_w, color));
+    p.line_segment(
+        [pos2(stem_x, c.y - h), pos2(stem_x, c.y + h * 0.9)],
+        Stroke::new(stem_w, color),
+    );
 
     // Bowl outline as a cubic bézier from the mid-stem, out to the side and back
     // to a point low on the stem. Sampled into overlapping dots whose radius
@@ -129,12 +132,21 @@ pub fn sharp(p: &egui::Painter, c: Pos2, h: f32, color: Color32) {
     let h_stroke = Stroke::new((h * 0.30).max(1.8), color);
     // Two vertical bars, overshooting top and bottom.
     for dx in [-w * 0.5, w * 0.5] {
-        p.line_segment([pos2(c.x + dx, c.y - h * 1.05), pos2(c.x + dx, c.y + h * 1.05)], v_stroke);
+        p.line_segment(
+            [
+                pos2(c.x + dx, c.y - h * 1.05),
+                pos2(c.x + dx, c.y + h * 1.05),
+            ],
+            v_stroke,
+        );
     }
     // Two rising horizontal bars.
     for dy in [-h * 0.36, h * 0.36] {
         p.line_segment(
-            [pos2(c.x - w, c.y + dy + h * 0.16), pos2(c.x + w, c.y + dy - h * 0.16)],
+            [
+                pos2(c.x - w, c.y + dy + h * 0.16),
+                pos2(c.x + w, c.y + dy - h * 0.16),
+            ],
             h_stroke,
         );
     }
@@ -145,10 +157,16 @@ pub fn half_sharp(p: &egui::Painter, c: Pos2, h: f32, color: Color32) {
     let w = h * 0.28;
     let v_stroke = Stroke::new((h * 0.11).max(1.0), color);
     let h_stroke = Stroke::new((h * 0.30).max(1.8), color);
-    p.line_segment([pos2(c.x, c.y - h * 1.05), pos2(c.x, c.y + h * 1.05)], v_stroke);
+    p.line_segment(
+        [pos2(c.x, c.y - h * 1.05), pos2(c.x, c.y + h * 1.05)],
+        v_stroke,
+    );
     for dy in [-h * 0.36, h * 0.36] {
         p.line_segment(
-            [pos2(c.x - w, c.y + dy + h * 0.09), pos2(c.x + w, c.y + dy - h * 0.09)],
+            [
+                pos2(c.x - w, c.y + dy + h * 0.09),
+                pos2(c.x + w, c.y + dy - h * 0.09),
+            ],
             h_stroke,
         );
     }

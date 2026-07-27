@@ -136,7 +136,11 @@ impl Tm2077App {
         // the recent history — then append `now` and keep only the last 4 taps.
         // All of this builds new persistent vectors rather than mutating in place.
         let restart = matches!(self.tap_times.last(), Some(&last) if now - last > 2.0);
-        let base = if restart { Vector::new() } else { self.tap_times.clone() };
+        let base = if restart {
+            Vector::new()
+        } else {
+            self.tap_times.clone()
+        };
         let taps = keep_last(&base.push_back(now), self.tap_count.max(2) as usize);
 
         if let Some(bpm) = tapped_bpm(&taps) {
@@ -186,11 +190,17 @@ impl Tm2077App {
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                         let (rect, resp) =
                             ui.allocate_exact_size(egui::vec2(15.0, 15.0), egui::Sense::click());
-                        let col = if resp.hovered() { pal.body_label } else { pal.body_label_dim };
+                        let col = if resp.hovered() {
+                            pal.body_label
+                        } else {
+                            pal.body_label_dim
+                        };
                         let stroke = egui::Stroke::new(1.6, col);
                         let pad = egui::vec2(4.0, 4.0);
-                        ui.painter()
-                            .line_segment([rect.left_top() + pad, rect.right_bottom() - pad], stroke);
+                        ui.painter().line_segment(
+                            [rect.left_top() + pad, rect.right_bottom() - pad],
+                            stroke,
+                        );
                         ui.painter().line_segment(
                             [
                                 rect.right_top() + egui::vec2(-pad.x, pad.y),
@@ -247,8 +257,8 @@ impl Tm2077App {
             let win_rect = inner.map(|r| r.response.rect);
             let close_it = ctx.input(|i| {
                 i.pointer.any_click()
-                    && win_rect.map_or(true, |wr| {
-                        i.pointer.interact_pos().map_or(true, |pos| !wr.contains(pos))
+                    && win_rect.is_none_or(|wr| {
+                        i.pointer.interact_pos().is_none_or(|pos| !wr.contains(pos))
                     })
             });
             if close_it {
@@ -287,7 +297,11 @@ const GRADUATIONS: [u32; 39] = [
 
 /// The next graduation strictly above `bpm` (unchanged if already at/above the top).
 pub(crate) fn next_graduation(bpm: u32) -> u32 {
-    GRADUATIONS.iter().copied().find(|&g| g > bpm).unwrap_or(bpm)
+    GRADUATIONS
+        .iter()
+        .copied()
+        .find(|&g| g > bpm)
+        .unwrap_or(bpm)
 }
 
 /// The previous graduation strictly below `bpm` (unchanged if already at/below the bottom).
@@ -377,7 +391,10 @@ mod tests {
 
     #[test]
     fn keep_last_trims_to_cap() {
-        assert_eq!(keep_last(&v(&[1.0, 2.0, 3.0, 4.0, 5.0]), 3), v(&[3.0, 4.0, 5.0]));
+        assert_eq!(
+            keep_last(&v(&[1.0, 2.0, 3.0, 4.0, 5.0]), 3),
+            v(&[3.0, 4.0, 5.0])
+        );
         assert_eq!(keep_last(&v(&[1.0, 2.0]), 3), v(&[1.0, 2.0]));
         assert_eq!(keep_last(&v(&[]), 3), v(&[]));
     }

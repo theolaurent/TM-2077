@@ -1,8 +1,16 @@
 #![warn(clippy::all)]
 // Strict no-panic policy (see AGENTS.md): production code must not use
-// `unwrap`/`expect`/`panic!`/`unreachable!`/`todo!`. These restriction lints
-// enforce it. Test modules (`#[cfg(test)]`) are exempt and not compiled here.
-#![warn(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
+// `unwrap`/`expect`/`panic!`/`unreachable!`/`todo!`/`unimplemented!`. These
+// restriction lints enforce it. Test modules (`#[cfg(test)]`) are exempt and
+// not compiled here.
+#![warn(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::todo,
+    clippy::unimplemented,
+    clippy::unreachable
+)]
 
 mod app;
 mod audio;

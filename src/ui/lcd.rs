@@ -5,7 +5,7 @@ use egui::{Align2, Color32, CornerRadius, FontId, Rect, Stroke, StrokeKind, pos2
 
 use super::{fill_gradient_v, glyphs, rel_rect, seg};
 use crate::app::Tm2077App;
-use crate::note::QuarterTone;
+use crate::note::Accidental;
 use crate::theme;
 
 /// Shrink factor applied to the 7-segment readouts (calib / BPM / beat).
@@ -23,7 +23,12 @@ pub fn draw(p: &egui::Painter, rect: Rect, app: &Tm2077App) {
     p.rect_filled(rect.expand(7.0), CornerRadius::same(10), t.bezel);
     p.rect_filled(rect.expand(3.0), CornerRadius::same(7), t.lcd_frame);
     fill_gradient_v(p, rect, t.lcd_bg, t.lcd_bg_edge, 6);
-    p.rect_stroke(rect, CornerRadius::same(6), Stroke::new(1.0, Color32::from_black_alpha(50)), StrokeKind::Inside);
+    p.rect_stroke(
+        rect,
+        CornerRadius::same(6),
+        Stroke::new(1.0, Color32::from_black_alpha(50)),
+        StrokeKind::Inside,
+    );
 
     tabs(p, rect);
     tuner(p, rect, app);
@@ -37,7 +42,13 @@ fn tabs(p: &egui::Painter, r: Rect) {
     for (frac, text) in [((0.02f32, 0.30f32), "TUNER"), ((0.70, 0.98), "METRONOME")] {
         let tab = shrunk(rel_rect(r, frac.0, 0.03, frac.1, 0.155), 0.8);
         p.rect_filled(tab, CornerRadius::same(4), t.lcd_ink);
-        p.text(tab.center(), Align2::CENTER_CENTER, text, FontId::proportional(10.0), t.lcd_bg);
+        p.text(
+            tab.center(),
+            Align2::CENTER_CENTER,
+            text,
+            FontId::proportional(10.0),
+            t.lcd_bg,
+        );
     }
 }
 
@@ -46,7 +57,11 @@ fn tabs(p: &egui::Painter, r: Rect) {
 // ---------------------------------------------------------------------------
 fn tuner(p: &egui::Painter, r: Rect, app: &Tm2077App) {
     let t = theme::palette(p);
-    let reading = if app.tuner_on { app.tuner.reading } else { None };
+    let reading = if app.tuner_on {
+        app.tuner.reading
+    } else {
+        None
+    };
 
     // A4 calibration readout (7-seg), mirroring the metronome's TEMPO field on
     // the far side of the LCD. The calib range (410-480 Hz) is always three
@@ -71,22 +86,19 @@ fn tuner(p: &egui::Painter, r: Rect, app: &Tm2077App) {
         vec2(cell_w, hz_rect.height()),
     );
     if let Some(rd) = reading {
-        if let Some(ch) = rd.name.chars().next() {
-            seg::letter(p, note_rect, ch, t.lcd_ink);
-        }
+        seg::letter(p, note_rect, rd.note.name, t.lcd_ink);
         // Accidental to the upper-right of the note.
         let acc_c = pos2(
             note_rect.max.x + note_rect.width() * 0.4,
             note_rect.min.y + note_rect.height() * 0.22,
         );
         let acc_h = note_rect.height() * 0.2;
-        if rd.name.ends_with('#') {
-            glyphs::sharp(p, acc_c, acc_h, t.lcd_ink);
-        }
-        match rd.quarter {
-            QuarterTone::HalfSharp => glyphs::half_sharp(p, acc_c, acc_h, t.lcd_ink),
-            QuarterTone::HalfFlat => glyphs::half_flat(p, acc_c, acc_h, t.lcd_ink),
-            QuarterTone::None => {}
+        match rd.note.accidental {
+            Some(Accidental::Sharp) => glyphs::sharp(p, acc_c, acc_h, t.lcd_ink),
+            Some(Accidental::Flat) => glyphs::flat(p, acc_c, acc_h, t.lcd_ink),
+            Some(Accidental::Demisharp) => glyphs::half_sharp(p, acc_c, acc_h, t.lcd_ink),
+            Some(Accidental::Demiflat) => glyphs::half_flat(p, acc_c, acc_h, t.lcd_ink),
+            None => {}
         }
     }
 }
@@ -116,8 +128,20 @@ fn needle_meter(p: &egui::Painter, r: Rect, app: &Tm2077App) {
     glyphs::marker_down(&p, pivot + dir(0.0) * (radius + 11.0), 5.5, t.lcd_ink);
 
     // Scale end labels near the arc ends.
-    p.text(pivot + dir(-max) * radius + vec2(-2.0, 10.0), Align2::CENTER_CENTER, "-50", FontId::proportional(11.0), t.lcd_ink);
-    p.text(pivot + dir(max) * radius + vec2(2.0, 10.0), Align2::CENTER_CENTER, "+50", FontId::proportional(11.0), t.lcd_ink);
+    p.text(
+        pivot + dir(-max) * radius + vec2(-2.0, 10.0),
+        Align2::CENTER_CENTER,
+        "-50",
+        FontId::proportional(11.0),
+        t.lcd_ink,
+    );
+    p.text(
+        pivot + dir(max) * radius + vec2(2.0, 10.0),
+        Align2::CENTER_CENTER,
+        "+50",
+        FontId::proportional(11.0),
+        t.lcd_ink,
+    );
 
     // --- Shared needle ---
     // The tuner deflects the needle by cents; the metronome swings it side to
@@ -189,7 +213,11 @@ fn needle_meter(p: &egui::Painter, r: Rect, app: &Tm2077App) {
         // Small gaps: between the needle tip and the arc, and — only when both
         // instruments drive the needle — between the two bands at the split.
         let tip_gap = radius * 0.04;
-        let split_gap = if tuner_on && metro_on { radius * 0.007 } else { 0.0 };
+        let split_gap = if tuner_on && metro_on {
+            radius * 0.007
+        } else {
+            0.0
+        };
         // Bottom band (pivot → below the split): metronome.
         p.line_segment(
             [pivot, pivot + dir(bottom_ang) * (split_r - split_gap)],

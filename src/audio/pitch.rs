@@ -71,7 +71,10 @@ mod tests {
         let mut t = PitchTracker::new(sr);
         for target in [110.0f32, 220.0, 660.0] {
             let f = t.detect(&sine(target, sr, WINDOW)).unwrap();
-            assert!((f - target).abs() / target < 0.02, "target {target}, got {f}");
+            assert!(
+                (f - target).abs() / target < 0.02,
+                "target {target}, got {f}"
+            );
         }
     }
 
