@@ -1,0 +1,38 @@
+name: CI
+
+on:
+  push:
+    branches: [main, dev]
+  pull_request:
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+          targets: wasm32-unknown-unknown
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Format
+        run: cargo fmt --check
+
+      - name: Test
+        run: cargo test --locked
+
+      # Clippy runs on the shipping targets only (no `--all-targets`): `#[cfg(test)]`
+      # modules are exempt from the panic lints (see AGENTS.md), and a plain clippy
+      # build leaves them out. `-D warnings` turns the crate's `#![warn(...)]` panic
+      # lints — and any other warning — into CI failures.
+      - name: Clippy (native)
+        run: cargo clippy --locked -- -D warnings
+
+      - name: Clippy (wasm)
+        run: cargo clippy --locked --target wasm32-unknown-unknown -- -D warnings

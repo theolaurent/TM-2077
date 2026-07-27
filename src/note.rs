@@ -37,16 +37,28 @@ impl Name {
     // `B.dflat()`, etc. Only the accidentals the built-in scales use are
     // provided (add `flat`/others when a scale needs them).
     const fn nat(self) -> Note {
-        Note { name: self, accidental: None }
+        Note {
+            name: self,
+            accidental: None,
+        }
     }
     const fn sharp(self) -> Note {
-        Note { name: self, accidental: Some(Accidental::Sharp) }
+        Note {
+            name: self,
+            accidental: Some(Accidental::Sharp),
+        }
     }
     const fn dsharp(self) -> Note {
-        Note { name: self, accidental: Some(Accidental::Demisharp) }
+        Note {
+            name: self,
+            accidental: Some(Accidental::Demisharp),
+        }
     }
     const fn dflat(self) -> Note {
-        Note { name: self, accidental: Some(Accidental::Demiflat) }
+        Note {
+            name: self,
+            accidental: Some(Accidental::Demiflat),
+        }
     }
 }
 
@@ -153,15 +165,45 @@ impl Scale {
         use Name::{A, B, C, D, E, F, G};
         let notes: &[Note] = match self {
             Scale::Chromatic => &[
-                A.nat(), A.sharp(), B.nat(), C.nat(), C.sharp(), D.nat(), D.sharp(), E.nat(),
-                F.nat(), F.sharp(), G.nat(), G.sharp(),
+                A.nat(),
+                A.sharp(),
+                B.nat(),
+                C.nat(),
+                C.sharp(),
+                D.nat(),
+                D.sharp(),
+                E.nat(),
+                F.nat(),
+                F.sharp(),
+                G.nat(),
+                G.sharp(),
             ],
             Scale::Guitar => &[A.nat(), B.nat(), D.nat(), E.nat(), G.nat()],
             Scale::QuarterTone => &[
-                A.nat(), A.dsharp(), A.sharp(), B.dflat(), B.nat(), B.dsharp(), C.nat(),
-                C.dsharp(), C.sharp(), D.dflat(), D.nat(), D.dsharp(), D.sharp(), E.dflat(),
-                E.nat(), E.dsharp(), F.nat(), F.dsharp(), F.sharp(), G.dflat(), G.nat(),
-                G.dsharp(), G.sharp(), A.dflat(),
+                A.nat(),
+                A.dsharp(),
+                A.sharp(),
+                B.dflat(),
+                B.nat(),
+                B.dsharp(),
+                C.nat(),
+                C.dsharp(),
+                C.sharp(),
+                D.dflat(),
+                D.nat(),
+                D.dsharp(),
+                D.sharp(),
+                E.dflat(),
+                E.nat(),
+                E.dsharp(),
+                F.nat(),
+                F.dsharp(),
+                F.sharp(),
+                G.dflat(),
+                G.nat(),
+                G.dsharp(),
+                G.sharp(),
+                A.dflat(),
             ],
         };
         notes.iter().copied().map(degree).collect()
@@ -236,7 +278,12 @@ impl NoteReading {
         // A4 = MIDI 69; scientific octaves change at C, so derive it MIDI-style.
         let midi = 69.0 + pos * 12.0;
         let octave = (midi.round() as i32).div_euclid(12) - 1;
-        Some(Self { freq, note, octave, cents })
+        Some(Self {
+            freq,
+            note,
+            octave,
+            cents,
+        })
     }
 
     /// True when within a tight tolerance of the target pitch.
