@@ -126,11 +126,56 @@ If you do use mutation, keep its scope as small as possible.
 
 [`rpds`]: https://docs.rs/rpds
 
+## Type safety & totality
+
+Prefer to make illegal states unrepresentable, so functions can be **total** (no
+error path to handle) rather than partial. A partial function that returns
+`Option`/`Result` only because its input can be malformed is usually a sign the
+input should have a tighter type.
+
+### Do
+
+- **Model with enums and structs, not strings or loose primitives.** A note is a
+  `Note { name: Name, accidental: Option<Accidental> }`, not a `&str` you inspect
+  with `.ends_with('#')`; a name is a `Name` enum, not a `char` you match with a
+  `_ => return None` fallback. Parse/validate once at the boundary, then pass the
+  precise type inward.
+- **Push fallibility to the edges.** Convert unstructured input (frequencies,
+  parsed files, user text) into a domain type as early as possible. Interior
+  functions then take that type and are total — no defensive `Option` threading.
+- **Prefer a total `match` over a partial lookup.** A `match` over an enum is
+  exhaustive and needs no catch-all; the compiler flags the missing case when a
+  variant is added. Favour that over `slice.get(i)?` / `map.get(k)?` keyed by a
+  stringly value.
+- **Let the type carry the invariant.** If a value is always one of N things,
+  encode the N in the type. `seg::letter` takes a `Name` (7 total cases), so it
+  can't be handed a non-letter and needs no error return — contrast the earlier
+  `char` version, which did. `src/note.rs` is the reference example of this whole
+  discipline.
+
+### Watch for
+
+- A `_ => return None` / `_ => unreachable!()` arm — often the input type is too
+  wide. Narrow it and the arm disappears.
+- An `Option`/`Result` return whose `None`/`Err` is "can't actually happen here"
+  — make it unrepresentable instead of documenting that it won't occur.
+- Reaching for `anyhow` to paper over a case a tighter enum would rule out. (The
+  no-panic rule still stands — this is about *removing* the error case, not
+  hiding a panic.)
+
+Judgement, not dogma: don't contort a type to eliminate a genuinely fallible
+boundary (I/O, real parsing, device init). The goal is fewer *spurious* error
+paths, not zero error handling.
+
 ## Before you finish
 
+- `cargo fmt` has been run (format after edits; the tree must be `cargo fmt`
+  clean — CI/reviewers assume default rustfmt formatting).
 - `cargo test` passes.
 - `cargo clippy` and `cargo clippy --target wasm32-unknown-unknown` show no new
   warnings from the panic lints above.
 - No new `.unwrap()`/`.expect()`/`panic!` in non-test code (`git grep` to check).
 - New logic favours a functional style; any new mutation or imperative loop
   falls under one of the exceptions above (DSP, painting, framework state).
+- New APIs favour total functions over partial ones (see *Type safety &
+  totality*); no `Option`/`Result` that only exists to handle an impossible case.
