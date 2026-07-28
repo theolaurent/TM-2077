@@ -78,6 +78,43 @@ version would be genuinely awkward or cumbersome (see the exceptions below).
 
 ### Smart pointers & shared state
 
+#### Communicating between threads: message passing first
+
+**Default to message passing. Shared mutable memory is the exception and must be
+justified.** To move data or events between threads, reach for a channel
+(`std::sync::mpsc`) before any `Arc<Mutex<T>>`. A channel transfers *ownership*
+instead of sharing it: the producer sends, the consumer owns what it receives.
+That alone rules out whole classes of bug — deadlock, lock poisoning, forgotten
+critical sections, data races — and it keeps real-time threads lock-free.
+
+`NativeTuner` is the reference example: the audio-input callback sends fixed-size
+`[f32; BLOCK]` sample blocks over a bounded `std::sync::mpsc::sync_channel`;
+`poll` receives and owns them. The bounded channel pre-allocates its ring, so
+`try_send` never allocates or blocks on the audio thread, and it drops a block
+rather than stalling if the consumer falls behind.
+
+Only fall back to shared *mutable* state when a channel genuinely cannot express
+the pattern — and say why in a comment. The one clear-cut case is
+**latest-value-wins** state: you want the single most recent value with
+intermediate updates coalesced, not the queue of every change a channel would
+deliver.
+
+- **Shared mutable state (the exception):** `Arc<Mutex<T>>` — or `Arc<RwLock<T>>`
+  only when reads dominate with many concurrent readers. Keep the critical
+  section tiny, and prefer the standard library: **do not pull in a lock-free
+  crate (e.g. `arc-swap`) without a demonstrated need.** Justified cases:
+  - `Metronome::control` (`Arc<Mutex<Control>>`): the UI pushes the *current*
+    tempo/beat settings; the audio callback reads a `Copy` of the latest. A
+    channel would queue every intermediate setting — here only the newest ever
+    matters, so a coalesced shared snapshot is the right tool.
+  - `WebTuner::analyser` (`Rc<RefCell<Option<AnalyserNode>>>`): written once,
+    asynchronously, by a `'static` `spawn_local` closure that cannot borrow
+    `self`; single-threaded interior mutability, not cross-thread sharing.
+  The no-panic rule still applies: never `.lock().unwrap()` — and in an audio
+  callback a poisoned lock means emit silence and `return`.
+
+#### Sharing data (not communicating): smart pointers
+
 Prefer sharing data through `Rc` / `Arc` rather than reaching for owned-unique or
 single-owner interior-mutability wrappers. When possible, use `Rc`/`Arc` instead
 of `Box`, `RefCell`, or `Cell`.
@@ -87,20 +124,6 @@ of `Box`, `RefCell`, or `Cell`.
   the default; keep the pointee immutable whenever you can.
 - **A single shared counter/flag:** use an atomic (`AtomicU32`, `AtomicBool`)
   behind an `Arc`, e.g. `Metronome::current_beat`.
-- **Shared *mutable* state** (multiple owners must read and write the same
-  value): `Arc<Mutex<T>>` — or `Arc<RwLock<T>>` only when reads dominate and
-  there are many concurrent readers — is the right, simple tool. Keep the
-  critical section tiny. Prefer the standard library here: **do not pull in a
-  lock-free crate (e.g. `arc-swap`) without a demonstrated need.** Current cases:
-  - `Metronome::control` (`Arc<Mutex<Control>>`): the UI thread writes the
-    tempo/beat/tone settings; the audio callback reads a `Copy` of them.
-  - `NativeTuner::ring` (`Arc<Mutex<Vec<f32>>>`): a growing sample buffer the
-    audio-input callback appends to every callback.
-  - `WebTuner::analyser` (`Rc<RefCell<Option<AnalyserNode>>>`): written once,
-    asynchronously, by a `'static` `spawn_local` closure that cannot borrow
-    `self`; single-threaded interior mutability is the right tool.
-  Note the no-panic rule still applies: never `.lock().unwrap()` — and in an
-  audio callback a poisoned lock means emit silence and `return`.
 - **`Box`** is fine when an external API demands it (e.g. eframe's
   `Box<dyn App>` in `src/main.rs`). Don't box just to heap-allocate a value you
   own uniquely and never share.
