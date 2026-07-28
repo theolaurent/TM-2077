@@ -10,6 +10,8 @@ mod tuner_native;
 #[cfg(target_arch = "wasm32")]
 mod tuner_web;
 
+pub use metronome::Sound;
+
 use crate::note::NoteReading;
 
 pub struct AudioEngine {
@@ -28,6 +30,10 @@ impl AudioEngine {
     // --- Metronome ---
     pub fn metronome_set(&self, bpm: u32, beats: u32, running: bool) {
         self.metronome.set(bpm, beats, running);
+    }
+
+    pub fn metronome_set_sound(&self, sound: Sound) {
+        self.metronome.set_sound(sound);
     }
 
     pub fn metronome_beat_count(&self) -> u32 {

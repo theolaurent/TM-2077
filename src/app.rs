@@ -4,7 +4,7 @@
 use rpds::Vector;
 use serde::{Deserialize, Serialize};
 
-use crate::audio::AudioEngine;
+use crate::audio::{AudioEngine, Sound};
 use crate::note::{NoteReading, Scale, Transposition};
 use crate::{theme, ui};
 
@@ -27,6 +27,8 @@ pub struct MetronomeState {
     pub beat_count: u32,
     /// TEMPO up/down steps through old-school graduations instead of by 1 bpm.
     pub graduated: bool,
+    /// Which click sound the metronome plays.
+    pub sound: Sound,
 }
 
 /// Persisted user settings (bpm/beats/A4/tuner toggle), stored via eframe.
@@ -47,6 +49,8 @@ struct Settings {
     transpose: Transposition,
     #[serde(default)]
     tempo_graduated: bool,
+    #[serde(default)]
+    sound: Sound,
 }
 
 fn default_tap_count() -> u32 {
@@ -81,6 +85,7 @@ impl Default for Settings {
             scale: Scale::default(),
             transpose: Transposition::default(),
             tempo_graduated: false,
+            sound: Sound::default(),
         }
     }
 }
@@ -128,6 +133,7 @@ impl Tm2077App {
                 running: false,
                 beat_count: 0,
                 graduated: s.tempo_graduated,
+                sound: s.sound,
             },
             audio: AudioEngine::new(),
             tap_times: Vector::new(),
@@ -148,6 +154,7 @@ impl Tm2077App {
             scale: self.tuner.scale,
             transpose: self.tuner.transpose,
             tempo_graduated: self.metronome.graduated,
+            sound: self.metronome.sound,
         }
     }
 
@@ -267,6 +274,14 @@ impl Tm2077App {
                     ui.selectable_value(&mut self.metronome.graduated, false, "1 bpm");
                     ui.selectable_value(&mut self.metronome.graduated, true, "Graduated");
                 });
+
+                ui.add_space(8.0);
+                ui.label("SOUND");
+                ui.horizontal(|ui| {
+                    let s = &mut self.metronome.sound;
+                    ui.selectable_value(s, Sound::Electronic, "Electronic");
+                    ui.selectable_value(s, Sound::Mechanical, "Mechanical");
+                });
             });
 
         if close || ctx.input(|i| i.key_pressed(egui::Key::Escape)) {
@@ -378,6 +393,7 @@ impl eframe::App for Tm2077App {
             self.metronome.beats_per_bar,
             self.metronome.running,
         );
+        self.audio.metronome_set_sound(self.metronome.sound);
         self.audio.tuner_set_enabled(self.tuner_on);
         self.audio.tuner_set_a4(self.tuner.a4);
         self.audio.tuner_set_scale(self.tuner.scale);
