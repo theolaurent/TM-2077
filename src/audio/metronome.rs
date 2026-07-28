@@ -41,11 +41,14 @@ impl Metronome {
         }
     }
 
-    /// Push the latest UI settings to the audio thread.
+    /// Push the latest UI settings to the audio thread. The clamps are a
+    /// defensive net against an out-of-range value from any caller; the UI paths
+    /// already keep these within range (see `crate::app` bounds).
     pub fn set(&self, bpm: u32, beats: u32, running: bool) {
+        use crate::app::{BEATS_MAX, BEATS_MIN, BPM_MAX, BPM_MIN};
         if let Ok(mut c) = self.control.lock() {
-            c.bpm = bpm.clamp(20, 400);
-            c.beats = beats.max(1);
+            c.bpm = bpm.clamp(BPM_MIN, BPM_MAX);
+            c.beats = beats.clamp(BEATS_MIN, BEATS_MAX);
             c.running = running;
         }
     }

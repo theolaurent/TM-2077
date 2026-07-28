@@ -53,6 +53,22 @@ fn default_tap_count() -> u32 {
     4
 }
 
+// Shared value ranges, so one bound lives in one place instead of being repeated
+// (and drifting) across the UI, the tap-tempo maths and the audio engine.
+
+/// Tempo bounds enforced by every UI path (manual TEMPO rocker, TAP TEMPO). The
+/// audio engine clamps to the same range as a defensive net.
+pub(crate) const BPM_MIN: u32 = 30;
+pub(crate) const BPM_MAX: u32 = 300;
+
+/// Beats-per-bar bounds.
+pub(crate) const BEATS_MIN: u32 = 1;
+pub(crate) const BEATS_MAX: u32 = 12;
+
+/// A4 calibration bounds (Hz) for the CALIB rocker.
+pub(crate) const A4_MIN: f32 = 410.0;
+pub(crate) const A4_MAX: f32 = 480.0;
+
 impl Default for Settings {
     fn default() -> Self {
         Self {
@@ -95,14 +111,20 @@ impl Tm2077App {
         Self {
             tuner_on: s.tuner_on,
             tuner: TunerState {
-                a4: s.a4,
+                // Clamp persisted values on load: an older or hand-edited save
+                // must not seed an out-of-range (or non-finite) calibration.
+                a4: if s.a4.is_finite() {
+                    s.a4.clamp(A4_MIN, A4_MAX)
+                } else {
+                    440.0
+                },
                 scale: s.scale,
                 transpose: s.transpose,
                 reading: None,
             },
             metronome: MetronomeState {
-                bpm: s.bpm,
-                beats_per_bar: s.beats_per_bar,
+                bpm: s.bpm.clamp(BPM_MIN, BPM_MAX),
+                beats_per_bar: s.beats_per_bar.clamp(BEATS_MIN, BEATS_MAX),
                 running: false,
                 beat_count: 0,
                 graduated: s.tempo_graduated,
@@ -285,7 +307,7 @@ fn tapped_bpm(taps: &Vector<f64>) -> Option<u32> {
     (intervals >= 1.0)
         .then_some((last - first) / intervals)
         .filter(|&avg| avg > 0.0)
-        .map(|avg| ((60.0 / avg).round() as i64).clamp(30, 300) as u32)
+        .map(|avg| ((60.0 / avg).round() as i64).clamp(BPM_MIN as i64, BPM_MAX as i64) as u32)
 }
 
 /// Traditional Maelzel metronome graduations (40–208 bpm): dense at the low end,

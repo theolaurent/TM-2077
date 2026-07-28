@@ -5,7 +5,10 @@
 use egui::{Align2, FontId, Rect, pos2, vec2};
 
 use super::{glyphs, icon_button, label, pill, rel_rect, rocker, round_button};
-use crate::app::{Tm2077App, next_graduation, prev_graduation};
+use crate::app::{
+    A4_MAX, A4_MIN, BEATS_MAX, BEATS_MIN, BPM_MAX, BPM_MIN, Tm2077App, next_graduation,
+    prev_graduation,
+};
 use crate::theme;
 
 /// Side of the square rubber buttons (rocker arrows + gear), as a fraction of
@@ -93,10 +96,10 @@ fn left_column(ui: &mut egui::Ui, p: &egui::Painter, d: Rect, app: &mut Tm2077Ap
     let calib = sq_rocker(d, 0.115, 0.37);
     let (up, dn) = rocker(ui, p, calib, "calib");
     if repeat_fire(ui, &up) {
-        app.tuner.a4 = (app.tuner.a4 + 1.0).clamp(410.0, 480.0);
+        app.tuner.a4 = (app.tuner.a4 + 1.0).clamp(A4_MIN, A4_MAX);
     }
     if repeat_fire(ui, &dn) {
-        app.tuner.a4 = (app.tuner.a4 - 1.0).clamp(410.0, 480.0);
+        app.tuner.a4 = (app.tuner.a4 - 1.0).clamp(A4_MIN, A4_MAX);
     }
 }
 
@@ -128,24 +131,24 @@ fn right_column(ui: &mut egui::Ui, p: &egui::Painter, d: Rect, app: &mut Tm2077A
     let tempo = sq_rocker(d, 0.925, 0.37);
     let (bu, bd) = rocker(ui, p, beat, "beat");
     if repeat_fire(ui, &bu) {
-        app.metronome.beats_per_bar = (app.metronome.beats_per_bar + 1).min(12);
+        app.metronome.beats_per_bar = app.metronome.beats_per_bar.saturating_add(1).min(BEATS_MAX);
     }
     if repeat_fire(ui, &bd) {
-        app.metronome.beats_per_bar = app.metronome.beats_per_bar.saturating_sub(1).max(1);
+        app.metronome.beats_per_bar = app.metronome.beats_per_bar.saturating_sub(1).max(BEATS_MIN);
     }
     let (tu, td) = rocker(ui, p, tempo, "tempo");
     if repeat_fire(ui, &tu) {
         app.metronome.bpm = if app.metronome.graduated {
             next_graduation(app.metronome.bpm)
         } else {
-            (app.metronome.bpm + 1).min(300)
+            app.metronome.bpm.saturating_add(1).min(BPM_MAX)
         };
     }
     if repeat_fire(ui, &td) {
         app.metronome.bpm = if app.metronome.graduated {
             prev_graduation(app.metronome.bpm)
         } else {
-            app.metronome.bpm.saturating_sub(1).max(30)
+            app.metronome.bpm.saturating_sub(1).max(BPM_MIN)
         };
     }
 

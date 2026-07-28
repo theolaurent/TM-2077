@@ -4,7 +4,7 @@
 use egui::{Align2, Color32, CornerRadius, FontId, Rect, Stroke, StrokeKind, pos2, vec2};
 
 use super::{fill_gradient_v, glyphs, rel_rect, seg};
-use crate::app::Tm2077App;
+use crate::app::{BPM_MIN, Tm2077App};
 use crate::note::Accidental;
 use crate::theme;
 
@@ -188,7 +188,10 @@ fn needle_meter(p: &egui::Painter, r: Rect, app: &Tm2077App) {
         }
         side
     });
-    let beat_secs = (60.0 / app.metronome.bpm.max(1) as f32).clamp(0.05, 1.0);
+    // Ease the swing over one whole beat. The upper bound is the beat period at
+    // the slowest tempo (BPM_MIN), so the needle tracks the beat exactly across
+    // the whole range instead of reaching its extreme early below 60 bpm.
+    let beat_secs = (60.0 / app.metronome.bpm.max(1) as f32).clamp(0.05, 60.0 / BPM_MIN as f32);
     let metro_ang = if metro_on {
         ctx.animate_value_with_time(swing_id, side * max, beat_secs)
     } else {

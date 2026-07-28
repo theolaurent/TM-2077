@@ -1,4 +1,7 @@
 #![warn(clippy::all)]
+// This crate contains no `unsafe`; keep it that way (web-sys/JS interop all goes
+// through safe wrappers). A hard guard matching the strict no-panic posture.
+#![forbid(unsafe_code)]
 // Strict no-panic policy (see AGENTS.md): production code must not use
 // `unwrap`/`expect`/`panic!`/`unreachable!`/`todo!`/`unimplemented!`. These
 // restriction lints enforce it. Test modules (`#[cfg(test)]`) are exempt and
