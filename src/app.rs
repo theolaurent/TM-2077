@@ -39,8 +39,6 @@ struct Settings {
     a4: f32,
     tuner_on: bool,
     // `serde(default)` keeps older saved settings (without these fields) loadable.
-    #[serde(default = "default_tap_count")]
-    tap_count: u32,
     #[serde(default)]
     theme: theme::Theme,
     #[serde(default)]
@@ -53,9 +51,8 @@ struct Settings {
     sound: Sound,
 }
 
-fn default_tap_count() -> u32 {
-    4
-}
+/// How many recent taps TAP TEMPO averages into a bpm.
+const TAP_COUNT: usize = 4;
 
 // Shared value ranges, so one bound lives in one place instead of being repeated
 // (and drifting) across the UI, the tap-tempo maths and the audio engine.
@@ -80,7 +77,6 @@ impl Default for Settings {
             beats_per_bar: 4,
             a4: 440.0,
             tuner_on: false,
-            tap_count: default_tap_count(),
             theme: theme::Theme::default(),
             scale: Scale::default(),
             transpose: Transposition::default(),
@@ -98,8 +94,6 @@ pub struct Tm2077App {
     audio: AudioEngine,
     /// Recent TAP TEMPO timestamps (seconds), as a persistent vector.
     tap_times: Vector<f64>,
-    /// How many recent taps TAP TEMPO averages into a bpm.
-    tap_count: u32,
     /// Light/dark device theme.
     theme: theme::Theme,
     /// Whether the settings popup is open.
@@ -137,7 +131,6 @@ impl Tm2077App {
             },
             audio: AudioEngine::new(),
             tap_times: Vector::new(),
-            tap_count: s.tap_count.clamp(2, 8),
             theme: s.theme,
             settings_open: false,
         }
@@ -149,7 +142,6 @@ impl Tm2077App {
             beats_per_bar: self.metronome.beats_per_bar,
             a4: self.tuner.a4,
             tuner_on: self.tuner_on,
-            tap_count: self.tap_count,
             theme: self.theme,
             scale: self.tuner.scale,
             transpose: self.tuner.transpose,
@@ -170,7 +162,7 @@ impl Tm2077App {
         } else {
             self.tap_times.clone()
         };
-        let taps = keep_last(&base.push_back(now), self.tap_count.max(2) as usize);
+        let taps = keep_last(&base.push_back(now), TAP_COUNT);
 
         if let Some(bpm) = tapped_bpm(&taps) {
             self.metronome.bpm = bpm;
@@ -250,7 +242,7 @@ impl Tm2077App {
                 ui.horizontal_wrapped(|ui| {
                     ui.selectable_value(&mut self.tuner.scale, Scale::Chromatic, "Chromatic");
                     ui.selectable_value(&mut self.tuner.scale, Scale::Guitar, "Guitar");
-                    ui.selectable_value(&mut self.tuner.scale, Scale::QuarterTone, "Quarter");
+                    ui.selectable_value(&mut self.tuner.scale, Scale::QuarterTone, "Quarter Tones");
                 });
 
                 ui.add_space(8.0);
@@ -264,11 +256,6 @@ impl Tm2077App {
                 });
 
                 ui.add_space(8.0);
-                ui.label("TAP TEMPO");
-                ui.add(egui::Slider::new(&mut self.tap_count, 2..=8).text("taps averaged"));
-                ui.small("How many recent taps are averaged into the tempo.");
-
-                ui.add_space(8.0);
                 ui.label("TEMPO STEP");
                 ui.horizontal(|ui| {
                     ui.selectable_value(&mut self.metronome.graduated, false, "1 bpm");
@@ -280,7 +267,7 @@ impl Tm2077App {
                 ui.horizontal(|ui| {
                     let s = &mut self.metronome.sound;
                     ui.selectable_value(s, Sound::Electronic, "Electronic");
-                    ui.selectable_value(s, Sound::Mechanical, "Mechanical");
+                    ui.selectable_value(s, Sound::Mechanical, "Vintage");
                 });
             });
 

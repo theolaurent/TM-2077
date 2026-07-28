@@ -173,8 +173,8 @@ impl Metronome {
         let decay_elec = 1.0 / (0.035 * sample_rate); // ~35 ms electronic click
         let decay_mech = 1.0 / (0.012 * sample_rate); // ~12 ms mechanical tick
         let bell_freq = 2000.0f32; // bright, metallic bike-bell fundamental
-        // Bell: multiplicative (exponential) decay that rings for ~450 ms.
-        let bell_decay = 0.0008f32.powf(1.0 / (0.45 * sample_rate));
+        // Bell: multiplicative (exponential) decay that rings for ~700 ms.
+        let bell_decay = 0.0008f32.powf(1.0 / (0.70 * sample_rate));
 
         device
             .build_output_stream(
