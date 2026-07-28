@@ -94,24 +94,36 @@ critical sections, data races — and it keeps real-time threads lock-free.
 rather than stalling if the consumer falls behind.
 
 Only fall back to shared *mutable* state when a channel genuinely cannot express
-the pattern — and say why in a comment. The one clear-cut case is
+the pattern — and say why in a comment. The clear-cut case is
 **latest-value-wins** state: you want the single most recent value with
 intermediate updates coalesced, not the queue of every change a channel would
-deliver.
+deliver. Reach for the lightest tool that fits:
 
-- **Shared mutable state (the exception):** `Arc<Mutex<T>>` — or `Arc<RwLock<T>>`
-  only when reads dominate with many concurrent readers. Keep the critical
-  section tiny, and prefer the standard library: **do not pull in a lock-free
-  crate (e.g. `arc-swap`) without a demonstrated need.** Justified cases:
-  - `Metronome::control` (`Arc<Mutex<Control>>`): the UI pushes the *current*
-    tempo/beat settings; the audio callback reads a `Copy` of the latest. A
-    channel would queue every intermediate setting — here only the newest ever
-    matters, so a coalesced shared snapshot is the right tool.
-  - `WebTuner::analyser` (`Rc<RefCell<Option<AnalyserNode>>>`): written once,
-    asynchronously, by a `'static` `spawn_local` closure that cannot borrow
-    `self`; single-threaded interior mutability, not cross-thread sharing.
-  The no-panic rule still applies: never `.lock().unwrap()` — and in an audio
-  callback a poisoned lock means emit silence and `return`.
+- **A latest value → the lightest atomic that fits.** When the fields carry no
+  cross-field invariant that must hold together, a **struct of atomics** behind
+  an `Arc` is the simplest tool. `Metronome::control` (`Arc<Control>`, where
+  `Control` is `{ bpm: AtomicU32, beats: AtomicU32, running: AtomicBool }`): the
+  UI `store`s each field, the audio callback `load`s them. Lock-free, std-only,
+  no allocation, nothing to poison. The one caveat is that reads across fields
+  can *tear* — a callback may briefly see a new `bpm` with an old `beats` — which
+  is harmless here and self-corrects on the next buffer. If you instead need a
+  **coherent** snapshot of all fields at once, publish the whole value atomically:
+  pack it into one `AtomicU32`/`AtomicU64` (by value, if it fits a word), or use
+  `ArcSwap<T>` (by reference, any size — a lock-free crate, so only with a
+  demonstrated need).
+- **A single counter/flag → an atomic** (`AtomicU32`, `AtomicBool`) behind an
+  `Arc`, e.g. `Metronome::beat_count` (the audio callback stores the beat number;
+  the UI loads it to drive the needle).
+- **In-place mutation under a lock → `Arc<Mutex<T>>`** (or `Arc<RwLock<T>>` only
+  when reads dominate with many concurrent readers) — when readers and writers
+  genuinely share and mutate the *same* value rather than each field standing
+  alone. Keep the critical section tiny; on a real-time thread never
+  `.lock().unwrap()`, and a poisoned lock means emit silence and `return`. (No
+  current code needs this.)
+- **Single-threaded interior mutability** (not cross-thread at all):
+  `WebTuner::analyser` (`Rc<RefCell<Option<AnalyserNode>>>`) is written once,
+  asynchronously, by a `'static` `spawn_local` closure that cannot borrow `self`
+  on the single wasm thread. `Rc`/`RefCell`, not `Arc`/`Mutex`.
 
 #### Sharing data (not communicating): smart pointers
 
@@ -121,9 +133,8 @@ of `Box`, `RefCell`, or `Cell`.
 
 - **Immutable shared data:** hold `Rc<T>` (single-thread) or `Arc<T>`
   (cross-thread) to an immutable `T` and share by cloning the pointer. This is
-  the default; keep the pointee immutable whenever you can.
-- **A single shared counter/flag:** use an atomic (`AtomicU32`, `AtomicBool`)
-  behind an `Arc`, e.g. `Metronome::current_beat`.
+  the default; keep the pointee immutable whenever you can. (For a shared
+  *mutable* value across threads, see message passing / atomics above.)
 - **`Box`** is fine when an external API demands it (e.g. eframe's
   `Box<dyn App>` in `src/main.rs`). Don't box just to heap-allocate a value you
   own uniquely and never share.
@@ -135,8 +146,9 @@ framework. These are expected to stay imperative and should **not** be forced
 into a functional shape:
 
 - **Audio DSP callbacks** (`src/audio/metronome.rs`, `tuner_native.rs`): tight
-  per-sample loops writing into a preallocated output/ring buffer. No
-  allocation, no persistent structures on the audio thread — mutate in place.
+  per-sample loops writing into a preallocated buffer (the output buffer, or a
+  fixed sample block that is then sent to the consumer). No allocation, no
+  persistent structures on the audio thread — mutate in place.
 - **Immediate-mode painting** (`src/ui/**`): egui painter calls are inherently
   side-effecting. A plain `for` loop that emits shapes is fine; keep the *value*
   computation functional (e.g. `digit_at` in `src/ui/seg.rs`) and let only the

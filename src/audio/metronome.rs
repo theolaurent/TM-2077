@@ -2,24 +2,28 @@
 //! a per-sample beat clock in the audio callback emits a short decaying sine
 //! "click" at each beat boundary and reports the current beat back to the UI.
 
-use std::sync::atomic::{AtomicU32, Ordering};
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 
 use anyhow::{Context as _, Result};
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use cpal::{FromSample, SizedSample};
 
-#[derive(Clone, Copy)]
+/// Shared metronome settings: independent atomics the UI writes and the audio
+/// callback reads, all lock-free. The fields carry no cross-field invariant, so
+/// a per-field read that briefly mixes a new value with an old one is harmless —
+/// it self-corrects on the next buffer.
 struct Control {
-    bpm: u32,
-    beats: u32,
-    running: bool,
+    bpm: AtomicU32,
+    beats: AtomicU32,
+    running: AtomicBool,
 }
 
 pub struct Metronome {
-    /// Latest UI settings, shared with the audio thread. The UI writes; the
-    /// audio callback reads. Critical sections are tiny (a `Copy` in/out).
-    control: Arc<Mutex<Control>>,
+    /// Latest UI settings, shared as a bundle of atomics: the UI `store`s each
+    /// field, the audio callback `load`s them — a lock-free read on the
+    /// real-time thread, with no mutex to block on or poison.
+    control: Arc<Control>,
     /// Monotonic beat counter, incremented once per beat by the audio callback.
     /// The UI watches it for beat changes (e.g. to swing the needle).
     beat_count: Arc<AtomicU32>,
@@ -30,11 +34,11 @@ pub struct Metronome {
 impl Metronome {
     pub fn new() -> Self {
         Self {
-            control: Arc::new(Mutex::new(Control {
-                bpm: 120,
-                beats: 4,
-                running: false,
-            })),
+            control: Arc::new(Control {
+                bpm: AtomicU32::new(120),
+                beats: AtomicU32::new(4),
+                running: AtomicBool::new(false),
+            }),
             beat_count: Arc::new(AtomicU32::new(0)),
             stream: None,
             started: false,
@@ -46,11 +50,13 @@ impl Metronome {
     /// already keep these within range (see `crate::app` bounds).
     pub fn set(&self, bpm: u32, beats: u32, running: bool) {
         use crate::app::{BEATS_MAX, BEATS_MIN, BPM_MAX, BPM_MIN};
-        if let Ok(mut c) = self.control.lock() {
-            c.bpm = bpm.clamp(BPM_MIN, BPM_MAX);
-            c.beats = beats.clamp(BEATS_MIN, BEATS_MAX);
-            c.running = running;
-        }
+        self.control
+            .bpm
+            .store(bpm.clamp(BPM_MIN, BPM_MAX), Ordering::Relaxed);
+        self.control
+            .beats
+            .store(beats.clamp(BEATS_MIN, BEATS_MAX), Ordering::Relaxed);
+        self.control.running.store(running, Ordering::Relaxed);
     }
 
     pub fn beat_count(&self) -> u32 {
@@ -121,27 +127,22 @@ impl Metronome {
             .build_output_stream(
                 cfg,
                 move |data: &mut [T], _: &cpal::OutputCallbackInfo| {
-                    // Never panic in the audio callback: if the lock is poisoned,
-                    // emit silence for this buffer rather than crashing the thread.
-                    let ctl = match control.lock() {
-                        Ok(guard) => *guard,
-                        Err(_) => {
-                            for s in data.iter_mut() {
-                                *s = T::from_sample(0.0);
-                            }
-                            return;
-                        }
-                    };
-                    let spb = (sample_rate as f64) * 60.0 / ctl.bpm.max(1) as f64;
+                    // Lock-free reads of the latest UI settings — no lock to
+                    // block on or poison, so nothing to fail and no silence
+                    // fallback. Read once per buffer into locals.
+                    let running = control.running.load(Ordering::Relaxed);
+                    let bpm = control.bpm.load(Ordering::Relaxed);
+                    let beats = control.beats.load(Ordering::Relaxed);
+                    let spb = (sample_rate as f64) * 60.0 / bpm.max(1) as f64;
 
-                    if ctl.running && !prev_running {
+                    if running && !prev_running {
                         samples_since_beat = spb; // downbeat on the next sample
                         beat_index = 0;
                     }
-                    prev_running = ctl.running;
+                    prev_running = running;
 
                     for frame in data.chunks_mut(channels) {
-                        if ctl.running {
+                        if running {
                             samples_since_beat += 1.0;
                             if samples_since_beat >= spb {
                                 samples_since_beat -= spb;
@@ -151,7 +152,7 @@ impl Metronome {
                                 phase = 0.0;
                                 tick = tick.wrapping_add(1);
                                 beat_count.store(tick, Ordering::Relaxed);
-                                beat_index = (beat_index + 1) % ctl.beats.max(1);
+                                beat_index = (beat_index + 1) % beats.max(1);
                             }
                         }
 
@@ -174,5 +175,26 @@ impl Metronome {
                 None,
             )
             .context("build_output_stream")
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::app::{BEATS_MAX, BEATS_MIN, BPM_MAX, BPM_MIN};
+
+    #[test]
+    fn set_stores_clamped_control() {
+        let m = Metronome::new();
+        m.set(150, 3, true);
+        assert_eq!(m.control.bpm.load(Ordering::Relaxed), 150);
+        assert_eq!(m.control.beats.load(Ordering::Relaxed), 3);
+        assert!(m.control.running.load(Ordering::Relaxed));
+
+        // Out-of-range inputs are clamped before being stored.
+        m.set(9999, 99, false);
+        assert_eq!(m.control.bpm.load(Ordering::Relaxed), BPM_MAX);
+        assert_eq!(m.control.beats.load(Ordering::Relaxed), BEATS_MAX);
+        assert!(!m.control.running.load(Ordering::Relaxed));
     }
 }
