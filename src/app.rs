@@ -362,6 +362,28 @@ impl eframe::App for Tm2077App {
         // clicks — so the click that opens it doesn't also close it.
         let settings_was_open = self.settings_open;
 
+        // Space bar toggles the metronome, even with the settings popup open.
+        // Match the raw event with `repeat: false` so holding the key doesn't flip
+        // it every frame (`key_pressed` counts OS key-repeat). Like a click, it
+        // also counts as a user gesture below.
+        let space = ui.input(|i| {
+            i.events.iter().any(|e| {
+                matches!(
+                    e,
+                    egui::Event::Key {
+                        key: egui::Key::Space,
+                        pressed: true,
+                        repeat: false,
+                        modifiers,
+                        ..
+                    } if modifiers.is_none()
+                )
+            })
+        });
+        if space {
+            self.metronome.running = !self.metronome.running;
+        }
+
         // Pull the latest audio state into the display model.
         self.audio.poll();
         self.metronome.beat_count = self.audio.metronome_beat_count();
@@ -387,8 +409,9 @@ impl eframe::App for Tm2077App {
         self.audio.tuner_set_transpose(self.tuner.transpose);
 
         // Now that this frame's settings are live, act on any user gesture — so a
-        // click that just enabled the tuner unlocks audio and prompts for the mic.
-        if clicked {
+        // click (or the space bar) that just started the metronome unlocks audio
+        // and prompts for the mic.
+        if clicked || space {
             self.audio.on_user_gesture();
         }
 
