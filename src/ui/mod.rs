@@ -24,11 +24,13 @@ const BASE_WIDTH: f32 = 820.0;
 
 /// Draw the whole device and handle its controls.
 pub fn draw_device(ui: &mut Ui, app: &mut Tm2077App) {
-    // Scroll-to-zoom: a plain vertical scroll adjusts egui's zoom factor, which
-    // scales the entire UI (device + text) together.
-    let scroll = ui.input(|i| i.smooth_scroll_delta.y);
-    if scroll != 0.0 {
-        let z = (ui.ctx().zoom_factor() * (scroll * 0.0015).exp()).clamp(0.4, 4.0);
+    // Zoom the whole UI (device + text) together by adjusting egui's zoom factor.
+    // Two input sources feed it: a vertical scroll (mouse wheel / trackpad) and a
+    // pinch — `zoom_delta` is egui's two-finger pinch on touchscreens (and
+    // ctrl+scroll on desktop), which is how phones drive the zoom.
+    let (scroll, pinch) = ui.input(|i| (i.smooth_scroll_delta.y, i.zoom_delta()));
+    if scroll != 0.0 || pinch != 1.0 {
+        let z = (ui.ctx().zoom_factor() * pinch * (scroll * 0.0015).exp()).clamp(0.4, 4.0);
         ui.ctx().set_zoom_factor(z);
     }
 
