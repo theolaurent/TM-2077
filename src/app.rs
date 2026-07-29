@@ -150,6 +150,63 @@ impl Tm2077App {
         }
     }
 
+    /// Handle all frame-global input in one pass: scroll/pinch zoom, the space
+    /// bar (play/pause), and the continuous-repaint decision. Returns whether a
+    /// user gesture (click or space) happened this frame, so the caller can unlock
+    /// web audio *after* the frame's settings are live. Per-widget interaction
+    /// (buttons, rockers, tap) stays with the widgets in `ui/controls.rs`, and the
+    /// settings popup handles its own Escape / click-outside.
+    fn handle_input(&mut self, ui: &mut egui::Ui) -> bool {
+        let (scroll, pinch, any_down, clicked, space) = ui.input(|i| {
+            // `repeat: false` so a held space doesn't toggle every frame
+            // (`key_pressed` counts OS key-repeat); no modifiers so Ctrl+Space
+            // and the like don't trigger it.
+            let space = i.events.iter().any(|e| {
+                matches!(
+                    e,
+                    egui::Event::Key {
+                        key: egui::Key::Space,
+                        pressed: true,
+                        repeat: false,
+                        modifiers,
+                        ..
+                    } if modifiers.is_none()
+                )
+            });
+            (
+                i.smooth_scroll_delta.y,
+                i.zoom_delta(),
+                i.pointer.any_down(),
+                i.pointer.any_click(),
+                space,
+            )
+        });
+
+        // Scroll-to-zoom (mouse wheel / trackpad) and pinch-to-zoom (two-finger on
+        // touchscreens, ctrl+scroll on desktop) both scale the whole UI together.
+        if scroll != 0.0 || pinch != 1.0 {
+            let z = (ui.ctx().zoom_factor() * pinch * (scroll * 0.0015).exp()).clamp(0.4, 4.0);
+            ui.ctx().set_zoom_factor(z);
+        }
+
+        // Space bar plays/pauses the metronome (works even with settings open).
+        if space {
+            self.metronome.running = !self.metronome.running;
+        }
+
+        // Drive continuous repaints only while something animates (beat dots /
+        // needle) or a pointer is held (so the rockers' press-and-hold auto-repeat
+        // keeps ticking); otherwise let egui idle and repaint on input, saving
+        // CPU/GPU. The metronome audio is unaffected — it runs on the audio thread.
+        if self.metronome.running || self.tuner_on || any_down {
+            ui.ctx().request_repaint();
+        }
+
+        // A click or the space bar counts as a user gesture (needed to unlock web
+        // audio / mic). Reported back so the caller can act on it at end of frame.
+        clicked || space
+    }
+
     /// Register a TAP TEMPO tap at time `now` (seconds) and update the bpm from
     /// the average of recent tap intervals.
     pub fn tap_tempo(&mut self, now: f64) {
@@ -343,46 +400,13 @@ impl eframe::App for Tm2077App {
         // Apply the active theme (device palette + egui base visuals) up front.
         theme::apply(ui.ctx(), self.theme);
 
-        // Only drive continuous repaints when something is actually animating
-        // (beat dots / needle). Otherwise let egui idle and repaint on input,
-        // saving CPU/GPU — especially in a backgrounded web tab. The metronome
-        // audio is unaffected; it runs on the audio thread.
-        // Repaint continuously while animating, and while a pointer button is
-        // held so the rockers' press-and-hold auto-repeat keeps ticking.
-        if self.metronome.running || self.tuner_on || ui.input(|i| i.pointer.any_down()) {
-            ui.ctx().request_repaint();
-        }
-
-        // Any click counts as a user gesture (needed to unlock web audio / mic).
-        // Handled at the end of the frame, *after* controls and settings run, so
-        // the same click that turns the tuner on requests the mic in that gesture
-        // instead of needing a second click.
-        let clicked = ui.input(|i| i.pointer.any_click());
-        // Whether the settings popup was already open *before* this frame's
-        // clicks — so the click that opens it doesn't also close it.
+        // All frame-global input — zoom, the space-bar play/pause, and the
+        // repaint/gesture decision — in one pass. Widget interaction (buttons,
+        // rockers, tap) stays with the widgets in `ui/controls.rs`.
+        let gesture = self.handle_input(ui);
+        // Whether the settings popup was already open *before* this frame's clicks
+        // — so the click that opens it doesn't also close it.
         let settings_was_open = self.settings_open;
-
-        // Space bar toggles the metronome, even with the settings popup open.
-        // Match the raw event with `repeat: false` so holding the key doesn't flip
-        // it every frame (`key_pressed` counts OS key-repeat). Like a click, it
-        // also counts as a user gesture below.
-        let space = ui.input(|i| {
-            i.events.iter().any(|e| {
-                matches!(
-                    e,
-                    egui::Event::Key {
-                        key: egui::Key::Space,
-                        pressed: true,
-                        repeat: false,
-                        modifiers,
-                        ..
-                    } if modifiers.is_none()
-                )
-            })
-        });
-        if space {
-            self.metronome.running = !self.metronome.running;
-        }
 
         // Pull the latest audio state into the display model.
         self.audio.poll();
@@ -411,7 +435,7 @@ impl eframe::App for Tm2077App {
         // Now that this frame's settings are live, act on any user gesture — so a
         // click (or the space bar) that just started the metronome unlocks audio
         // and prompts for the mic.
-        if clicked || space {
+        if gesture {
             self.audio.on_user_gesture();
         }
 
