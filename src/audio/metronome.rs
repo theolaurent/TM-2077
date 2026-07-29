@@ -200,7 +200,9 @@ impl Metronome {
                             samples_since_beat += 1.0;
                             if samples_since_beat >= spb {
                                 samples_since_beat -= spb;
-                                let downbeat = beat_index == 0;
+                                // beats == 0 means no accent: every beat is a
+                                // plain tick (no downbeat, no bell).
+                                let downbeat = beats != 0 && beat_index == 0;
                                 let (beat_voice, beat_freq) = match (sound, downbeat) {
                                     (Sound::Electronic, true) => (Voice::Beep, 1000.0),
                                     (Sound::Electronic, false) => (Voice::Beep, 800.0),

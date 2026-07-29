@@ -62,8 +62,8 @@ const TAP_COUNT: usize = 4;
 pub(crate) const BPM_MIN: u32 = 30;
 pub(crate) const BPM_MAX: u32 = 300;
 
-/// Beats-per-bar bounds.
-pub(crate) const BEATS_MIN: u32 = 1;
+/// Beats-per-bar bounds. 0 = no accented downbeat, just a steady uniform tick.
+pub(crate) const BEATS_MIN: u32 = 0;
 pub(crate) const BEATS_MAX: u32 = 12;
 
 /// A4 calibration bounds (Hz) for the CALIB rocker.

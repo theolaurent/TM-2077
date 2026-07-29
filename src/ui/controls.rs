@@ -6,8 +6,7 @@ use egui::{Align2, FontId, Rect, pos2, vec2};
 
 use super::{glyphs, icon_button, label, pill, rel_rect, rocker, round_button};
 use crate::app::{
-    A4_MAX, A4_MIN, BEATS_MAX, BEATS_MIN, BPM_MAX, BPM_MIN, Tm2077App, next_graduation,
-    prev_graduation,
+    A4_MAX, A4_MIN, BEATS_MAX, BPM_MAX, BPM_MIN, Tm2077App, next_graduation, prev_graduation,
 };
 use crate::theme;
 
@@ -134,7 +133,7 @@ fn right_column(ui: &mut egui::Ui, p: &egui::Painter, d: Rect, app: &mut Tm2077A
         app.metronome.beats_per_bar = app.metronome.beats_per_bar.saturating_add(1).min(BEATS_MAX);
     }
     if repeat_fire(ui, &bd) {
-        app.metronome.beats_per_bar = app.metronome.beats_per_bar.saturating_sub(1).max(BEATS_MIN);
+        app.metronome.beats_per_bar = app.metronome.beats_per_bar.saturating_sub(1);
     }
     let (tu, td) = rocker(ui, p, tempo, "tempo");
     if repeat_fire(ui, &tu) {
