@@ -275,9 +275,16 @@ impl NoteReading {
             .map(|(note, pos, _)| (note, pos))?;
 
         let cents = ((x - pos) * 1200.0) as f32;
-        // A4 = MIDI 69; scientific octaves change at C, so derive it MIDI-style.
-        let midi = 69.0 + pos * 12.0;
-        let octave = (midi.round() as i32).div_euclid(12) - 1;
+        // Scientific octaves change at C, so the octave has to follow the note's
+        // *letter*, not the raw pitch. A quarter-tone accidental lands the pitch
+        // on a half-semitone (e.g. B half-sharp ≈ MIDI 71.5); rounding that to a
+        // MIDI number would cross the B/C boundary and mislabel the octave (B5
+        // instead of B4). So anchor on the natural name — always a whole semitone
+        // — and take the octave copy nearest the reading. A4 = MIDI 69.
+        let rel_nat =
+            (note.name.semitones_from_c() - Name::A.semitones_from_c()).rem_euclid(12.0) / 12.0;
+        let pos_nat = rel_nat + (pos - rel_nat).round();
+        let octave = ((69.0 + pos_nat * 12.0).round() as i32).div_euclid(12) - 1;
         Some(Self {
             freq,
             note,
@@ -364,6 +371,16 @@ mod tests {
         let r = reading(f, Scale::QuarterTone, Transposition::Concert);
         assert_eq!(r.note, note(Name::B, Some(Accidental::Demiflat)));
         assert!(r.cents.abs() < 1.0);
+    }
+
+    #[test]
+    fn quarter_tone_octave_follows_letter() {
+        // B half-sharp (~508 Hz) is a raised B4. Its pitch rounds up across the
+        // B/C octave boundary, but the octave must track the *letter*: B4, not B5.
+        let f = 440.0 * 2f32.powf(2.5 / 12.0);
+        let r = reading(f, Scale::QuarterTone, Transposition::Concert);
+        assert_eq!(r.note, note(Name::B, Some(Accidental::Demisharp)));
+        assert_eq!(r.octave, 4);
     }
 
     #[test]

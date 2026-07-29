@@ -43,9 +43,20 @@ impl WebTuner {
     }
 
     pub fn set_enabled(&mut self, on: bool) {
+        // Called every frame with the same value; only act on a real transition.
+        if on == self.enabled {
+            return;
+        }
         self.enabled = on;
         if !on {
             self.reading = None;
+        }
+        // Suspend the audio graph while the tuner is off so the analyser stops
+        // processing (saving CPU/battery), and resume it when it comes back on.
+        // The mic MediaStream track itself stays live by design — releasing it
+        // would force a fresh getUserMedia prompt on every re-enable.
+        if let Some(ctx) = &self.ctx {
+            let _ = if on { ctx.resume() } else { ctx.suspend() };
         }
     }
 

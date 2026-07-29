@@ -56,9 +56,33 @@ impl NativeTuner {
     }
 
     pub fn set_enabled(&mut self, on: bool) {
+        // Called every frame with the same value; only act on a real transition.
+        if on == self.enabled {
+            return;
+        }
         self.enabled = on;
         if !on {
             self.reading = None;
+            // Drop stale samples so a later re-enable starts from fresh audio.
+            self.window.clear();
+        }
+        // Pause the mic capture while the tuner is off — frees the input device
+        // and clears the OS "mic in use" indicator — and resume it when the
+        // tuner comes back on. The stream only exists once a user gesture has
+        // started it (`ensure_started`); before that there is nothing to pause.
+        if let Some(stream) = &self.stream {
+            // `play`/`pause` return distinct error types, so handle them apart.
+            let res = if on {
+                stream.play().map_err(|e| e.to_string())
+            } else {
+                stream.pause().map_err(|e| e.to_string())
+            };
+            if let Err(e) = res {
+                log::error!(
+                    "tuner: stream {} failed: {e}",
+                    if on { "resume" } else { "pause" }
+                );
+            }
         }
     }
 

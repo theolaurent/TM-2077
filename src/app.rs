@@ -93,7 +93,7 @@ pub struct Tm2077App {
     pub metronome: MetronomeState,
     audio: AudioEngine,
     /// Recent TAP TEMPO timestamps (seconds), as a persistent vector.
-    tap_times: Vector<f64>, // TODO: should that be a rpds::Queue?
+    tap_times: Vector<f64>,
     /// Light/dark device theme.
     theme: theme::Theme,
     /// Whether the settings popup is open.
