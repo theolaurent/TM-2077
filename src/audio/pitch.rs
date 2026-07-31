@@ -5,9 +5,12 @@
 use pitch_detection::detector::PitchDetector;
 use pitch_detection::detector::mcleod::McLeodDetector;
 
-/// Analysis window size (samples). ~43 ms at 48 kHz — long enough to resolve
-/// low notes, short enough to feel responsive.
-pub const WINDOW: usize = 2048;
+/// Analysis window size (samples). ~85 ms at 48 kHz: long enough to resolve low
+/// notes and to give a *stable* estimate (a shorter window jitters more cycle to
+/// cycle, which the display smoothing then has to hide), still short enough to
+/// track real pitch changes. Must be a power of two (the web `AnalyserNode` FFT
+/// size). The needle's residual jitter is smoothed on the display side too.
+pub const WINDOW: usize = 4096;
 
 pub struct PitchTracker {
     detector: McLeodDetector<f32>,
@@ -25,10 +28,12 @@ impl PitchTracker {
     /// Detect the fundamental from the most recent `WINDOW` samples of `buf`.
     /// Returns `None` on silence or an unclear (noisy/polyphonic) signal.
     pub fn detect(&mut self, buf: &[f32]) -> Option<f32> {
-        if buf.len() < WINDOW {
+        // `.get` (not `buf[..]`): keeps the no-panic-by-construction posture even
+        // though the length is already checked — matches the rest of the codebase.
+        let window = buf.get(buf.len().saturating_sub(WINDOW)..)?;
+        if window.len() < WINDOW {
             return None;
         }
-        let window = &buf[buf.len() - WINDOW..];
 
         // Cheap RMS gate so background noise doesn't chase the needle.
         let rms = (window.iter().map(|s| s * s).sum::<f32>() / WINDOW as f32).sqrt();

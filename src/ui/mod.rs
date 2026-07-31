@@ -12,6 +12,7 @@ use egui::{
 };
 
 use crate::app::Tm2077App;
+use crate::note::IN_TUNE_CENTS;
 use crate::theme;
 
 /// Aspect ratio (w:h) of the device body, close to the real TM-60.
@@ -74,9 +75,9 @@ fn leds(p: &egui::Painter, d: Rect, app: &Tm2077App) {
         None
     };
     let cents = reading.map(|r| r.cents);
-    let flat = matches!(cents, Some(c) if c < -4.0);
-    let sharp = matches!(cents, Some(c) if c > 4.0);
-    let intune = matches!(cents, Some(c) if c.abs() <= 4.0);
+    let flat = matches!(cents, Some(c) if c < -IN_TUNE_CENTS);
+    let sharp = matches!(cents, Some(c) if c > IN_TUNE_CENTS);
+    let intune = matches!(cents, Some(c) if c.abs() <= IN_TUNE_CENTS);
 
     let y = d.min.y + d.height() * 0.085;
     let cx = d.center().x;

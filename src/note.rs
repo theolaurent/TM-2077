@@ -236,6 +236,11 @@ impl Transposition {
     }
 }
 
+/// Tolerance, in cents, within which a reading counts as in tune. The single
+/// source of truth for both the `in_tune()` test and the LCD's flat/in-tune/sharp
+/// LED decision (`ui::leds`), so the threshold can't drift between them.
+pub const IN_TUNE_CENTS: f32 = 4.0;
+
 /// A pitch reading derived from a detected frequency.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct NoteReading {
@@ -295,7 +300,7 @@ impl NoteReading {
 
     /// True when within a tight tolerance of the target pitch.
     pub fn in_tune(&self) -> bool {
-        self.cents.abs() <= 4.0
+        self.cents.abs() <= IN_TUNE_CENTS
     }
 }
 

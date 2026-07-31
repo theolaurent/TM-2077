@@ -63,26 +63,29 @@ pub fn digit(p: &egui::Painter, rect: Rect, d: Option<u8>, ink: Color32) {
     }
 }
 
+/// The digit shown in column `i` (from the left) of a right-aligned `count`-cell
+/// readout of `value`, or `None` for a blank cell. Pure so it can be unit-tested.
+///
+/// Two ways a cell blanks: a leading position above the value's magnitude, or —
+/// when `value` needs more digits than there are cells — the *whole* field, so it
+/// never lies by showing only the low digits (e.g. 1319 in 3 cells must not read
+/// "319"). `None` is also returned for an out-of-range `i` (`i >= count`).
+fn digit_at(value: u32, count: usize, i: usize) -> Option<u8> {
+    // Decimal place this column maps to: leftmost is the highest place.
+    let place = count.checked_sub(1)?.checked_sub(i)? as u32;
+    let pow = 10u32.checked_pow(place)?;
+    // Does the value fit in `count` digits at all?
+    let fits = 10u32
+        .checked_pow(count as u32)
+        .is_none_or(|cap| value < cap);
+    (fits && (place == 0 || value >= pow)).then_some(((value / pow) % 10) as u8)
+}
+
 /// Draw a right-aligned integer within `rect` using `count` digit cells.
 /// Leading positions are blank.
 pub fn number(p: &egui::Painter, rect: Rect, value: u32, count: usize, ink: Color32) {
     let gap = rect.width() * 0.06 / count as f32;
     let cell_w = (rect.width() - gap * (count as f32 - 1.0)) / count as f32;
-
-    // A value that needs more digits than we have cells can't be shown honestly;
-    // blank the whole field rather than silently displaying its low digits
-    // (e.g. 1319 Hz in 3 cells must not read "319").
-    let fits = 10u32
-        .checked_pow(count as u32)
-        .is_none_or(|cap| value < cap);
-
-    // The digit shown in column `i` from the left maps to decimal place
-    // `count-1-i`; leading places above the value's magnitude stay blank.
-    let digit_at = |i: usize| -> Option<u8> {
-        let place = (count - 1 - i) as u32;
-        let pow = 10u32.checked_pow(place)?;
-        (fits && (place == 0 || value >= pow)).then_some(((value / pow) % 10) as u8)
-    };
 
     // Painting is a side effect, so the placement loop stays imperative.
     for i in 0..count {
@@ -90,7 +93,7 @@ pub fn number(p: &egui::Painter, rect: Rect, value: u32, count: usize, ink: Colo
             pos2(rect.min.x + i as f32 * (cell_w + gap), rect.min.y),
             vec2(cell_w, rect.height()),
         );
-        digit(p, cell, digit_at(i), ink);
+        digit(p, cell, digit_at(value, count, i), ink);
     }
 }
 
@@ -177,4 +180,44 @@ fn vseg(c: Pos2, len: f32, th: f32) -> Vec<Pos2> {
         c + vec2(-ht, hl - ht),
         c + vec2(-ht, -hl + ht),
     ]
+}
+
+#[cfg(test)]
+mod tests {
+    use super::digit_at;
+
+    /// All cells of a `count`-cell readout of `value`, left to right.
+    fn cells(value: u32, count: usize) -> Vec<Option<u8>> {
+        (0..count).map(|i| digit_at(value, count, i)).collect()
+    }
+
+    #[test]
+    fn right_aligns_with_leading_blanks() {
+        // 40 in 3 cells → blank, 4, 0.
+        assert_eq!(cells(40, 3), vec![None, Some(4), Some(0)]);
+    }
+
+    #[test]
+    fn zero_shows_a_single_zero() {
+        assert_eq!(cells(0, 3), vec![None, None, Some(0)]);
+    }
+
+    #[test]
+    fn full_width_value_fills_every_cell() {
+        assert_eq!(cells(208, 3), vec![Some(2), Some(0), Some(8)]);
+    }
+
+    #[test]
+    fn too_wide_value_blanks_the_whole_field() {
+        // 1319 needs 4 digits; in 3 cells it must blank rather than read "319".
+        assert_eq!(cells(1319, 3), vec![None, None, None]);
+        // The boundary: 999 fits in 3 cells, 1000 does not.
+        assert_eq!(cells(999, 3), vec![Some(9), Some(9), Some(9)]);
+        assert_eq!(cells(1000, 3), vec![None, None, None]);
+    }
+
+    #[test]
+    fn out_of_range_column_is_blank() {
+        assert_eq!(digit_at(42, 2, 2), None);
+    }
 }

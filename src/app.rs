@@ -31,13 +31,18 @@ pub struct MetronomeState {
     pub sound: Sound,
 }
 
-/// Persisted user settings (bpm/beats/A4/tuner toggle), stored via eframe.
+/// Persisted user settings (bpm/beats/A4/…), stored via eframe.
+///
+/// `tuner_on` is deliberately *not* persisted: like `running`, it's a live
+/// transport toggle, not a preference. It also can't take effect until a user
+/// gesture unlocks the mic (autoplay policy), so restoring it "on" would show an
+/// armed-but-silent tuner after a reload. The tuner always boots off. (Any
+/// `tuner_on` field in an older save is simply ignored on load.)
 #[derive(Serialize, Deserialize)]
 struct Settings {
     bpm: u32,
     beats_per_bar: u32,
     a4: f32,
-    tuner_on: bool,
     // `serde(default)` keeps older saved settings (without these fields) loadable.
     #[serde(default)]
     theme: theme::Theme,
@@ -76,7 +81,6 @@ impl Default for Settings {
             bpm: 120,
             beats_per_bar: 4,
             a4: 440.0,
-            tuner_on: false,
             theme: theme::Theme::default(),
             scale: Scale::default(),
             transpose: Transposition::default(),
@@ -108,7 +112,8 @@ impl Tm2077App {
             .unwrap_or_default();
 
         Self {
-            tuner_on: s.tuner_on,
+            // The tuner always boots off (not persisted — see `Settings`).
+            tuner_on: false,
             tuner: TunerState {
                 // Clamp persisted values on load: an older or hand-edited save
                 // must not seed an out-of-range (or non-finite) calibration.
@@ -141,7 +146,6 @@ impl Tm2077App {
             bpm: self.metronome.bpm,
             beats_per_bar: self.metronome.beats_per_bar,
             a4: self.tuner.a4,
-            tuner_on: self.tuner_on,
             theme: self.theme,
             scale: self.tuner.scale,
             transpose: self.tuner.transpose,
@@ -157,12 +161,25 @@ impl Tm2077App {
     /// (buttons, rockers, tap) stays with the widgets in `ui/controls.rs`, and the
     /// settings popup handles its own Escape / click-outside.
     fn handle_input(&mut self, ui: &mut egui::Ui) -> bool {
-        let (scroll, pinch, any_down, clicked, space) = ui.input(|i| {
-            // `repeat: false` so a held space doesn't toggle every frame
-            // (`key_pressed` counts OS key-repeat); no modifiers so Ctrl+Space
-            // and the like don't trigger it.
-            let space = i.events.iter().any(|e| {
-                matches!(
+        let (scroll, pinch, any_down, clicked) = ui.input(|i| {
+            (
+                i.smooth_scroll_delta.y,
+                i.zoom_delta(),
+                i.pointer.any_down(),
+                i.pointer.any_click(),
+            )
+        });
+
+        // Space is play/pause and *only* that — consume the key event so it never
+        // also reaches a focused widget (e.g. a settings option), which would
+        // otherwise both toggle the metronome and actuate that widget. `input_mut`
+        // removes the matching events; `repeat: false` so a held space doesn't
+        // toggle every frame (OS key-repeat), and no modifiers so Ctrl+Space etc.
+        // fall through untouched.
+        let space = ui.input_mut(|i| {
+            let mut pressed = false;
+            i.events.retain(|e| {
+                let toggle = matches!(
                     e,
                     egui::Event::Key {
                         key: egui::Key::Space,
@@ -171,15 +188,11 @@ impl Tm2077App {
                         modifiers,
                         ..
                     } if modifiers.is_none()
-                )
+                );
+                pressed |= toggle;
+                !toggle
             });
-            (
-                i.smooth_scroll_delta.y,
-                i.zoom_delta(),
-                i.pointer.any_down(),
-                i.pointer.any_click(),
-                space,
-            )
+            pressed
         });
 
         // Scroll-to-zoom (mouse wheel / trackpad) and pinch-to-zoom (two-finger on
@@ -400,6 +413,14 @@ impl eframe::App for Tm2077App {
         // Apply the active theme (device palette + egui base visuals) up front.
         theme::apply(ui.ctx(), self.theme);
 
+        // Paint the backdrop behind the device ourselves. eframe hands `ui` a bare
+        // root with no panel background, so `panel_fill` alone never shows — fill
+        // the whole viewport with the theme's panel colour (otherwise the Light
+        // theme's light surround would stay the default dark).
+        let screen = ui.ctx().input(|i| i.viewport_rect());
+        ui.painter()
+            .rect_filled(screen, egui::CornerRadius::ZERO, self.theme.palette().panel);
+
         // All frame-global input — zoom, the space-bar play/pause, and the
         // repaint/gesture decision — in one pass. Widget interaction (buttons,
         // rockers, tap) stays with the widgets in `ui/controls.rs`.
@@ -495,6 +516,18 @@ mod tests {
         assert_eq!(prev_graduation(40), 40); // stays at the bottom
         assert_eq!(next_graduation(250), 250); // above the scale: up stays
         assert_eq!(prev_graduation(250), 208); // above the scale: down enters
+    }
+
+    #[test]
+    fn tap_stays_off_grid_then_snaps_to_graduation() {
+        // TAP TEMPO ignores graduated mode: it yields the exact averaged tempo,
+        // even one that sits between graduations (e.g. 0.42 s → ~143 bpm).
+        let tapped = tapped_bpm(&v(&[0.0, 0.42, 0.84, 1.26])).expect("two+ taps");
+        assert_eq!(tapped, 143);
+        assert!(!GRADUATIONS.contains(&tapped));
+        // The next ▲/▼ then snaps onto the surrounding graduations.
+        assert_eq!(next_graduation(tapped), 144);
+        assert_eq!(prev_graduation(tapped), 138);
     }
 
     #[test]

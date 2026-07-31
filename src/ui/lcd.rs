@@ -152,7 +152,13 @@ fn needle_meter(p: &egui::Painter, r: Rect, app: &Tm2077App) {
     let ctx = p.ctx();
 
     let tuner_on = app.tuner_on;
-    let tuner_ang = if tuner_on {
+    // Ease the tuner needle toward the reading rather than snapping to it: the
+    // pitch estimate wobbles a cent or two frame-to-frame, and a raw mapping makes
+    // the needle twitch. A short time-constant low-passes that jitter while still
+    // tracking real pitch changes. Off (or no note) rests at centre.
+    const TUNER_EASE: f32 = 0.08;
+    let tuner_id = egui::Id::new("tuner_needle_ang");
+    let tuner_target = if tuner_on {
         app.tuner
             .reading
             .map(|rd| rd.cents.clamp(-50.0, 50.0) / 50.0 * max)
@@ -160,6 +166,13 @@ fn needle_meter(p: &egui::Painter, r: Rect, app: &Tm2077App) {
     } else {
         0.0
     };
+    // While the tuner is off, snap (time 0) so a later re-enable starts at centre
+    // instead of easing over from a stale angle.
+    let tuner_ang = ctx.animate_value_with_time(
+        tuner_id,
+        tuner_target,
+        if tuner_on { TUNER_EASE } else { 0.0 },
+    );
 
     let metro_on = app.metronome.running;
     // Flip the swing side every time the audio beat advances (works for any
