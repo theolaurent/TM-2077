@@ -54,6 +54,25 @@ struct Settings {
     tempo_graduated: bool,
     #[serde(default)]
     sound: Sound,
+    // Which of `(tuner, metronome)` were last on, for the space-bar restore.
+    // Persisted so a restart remembers it; unlike `tuner_on`/`running` this is a
+    // preference (what space should bring back), not the live transport state.
+    #[serde(default = "default_last_on")]
+    last_on: (bool, bool),
+    // UI zoom factor (scroll / pinch), persisted so the device keeps its size.
+    #[serde(default = "default_zoom")]
+    zoom: f32,
+}
+
+/// Seed for `last_on`: the metronome, so a fresh install's first space press is
+/// a plain metronome play/pause.
+fn default_last_on() -> (bool, bool) {
+    (false, true)
+}
+
+/// Seed for `zoom`: 1× (egui's default zoom factor).
+fn default_zoom() -> f32 {
+    1.0
 }
 
 /// How many recent taps TAP TEMPO averages into a bpm.
@@ -75,6 +94,10 @@ pub(crate) const BEATS_MAX: u32 = 12;
 pub(crate) const A4_MIN: f32 = 410.0;
 pub(crate) const A4_MAX: f32 = 480.0;
 
+/// UI zoom bounds (scroll / pinch), also used to sanitise a persisted value.
+const ZOOM_MIN: f32 = 0.4;
+const ZOOM_MAX: f32 = 4.0;
+
 impl Default for Settings {
     fn default() -> Self {
         Self {
@@ -86,6 +109,8 @@ impl Default for Settings {
             transpose: Transposition::default(),
             tempo_graduated: false,
             sound: Sound::default(),
+            last_on: default_last_on(),
+            zoom: default_zoom(),
         }
     }
 }
@@ -102,6 +127,15 @@ pub struct Tm2077App {
     theme: theme::Theme,
     /// Whether the settings popup is open.
     pub settings_open: bool,
+    /// The last non-empty on-set — which of `(tuner, metronome)` were running —
+    /// so the space bar can restore it after it has stopped both. Updated every
+    /// frame something is on, and persisted across restarts (see `Settings`).
+    /// Seeded to the metronome so the very first space press (nothing ever on
+    /// yet) starts the metronome, matching a plain play/pause.
+    last_on: (bool, bool),
+    /// Live UI zoom factor, mirrored from the egui context each frame so it can
+    /// be persisted (the `save` hook has no context to read it from).
+    zoom: f32,
 }
 
 impl Tm2077App {
@@ -110,6 +144,15 @@ impl Tm2077App {
             .storage
             .and_then(|s| eframe::get_value::<Settings>(s, eframe::APP_KEY))
             .unwrap_or_default();
+
+        // Restore the persisted zoom (sanitised), applying it to the context so
+        // the device opens at its remembered size.
+        let zoom = if s.zoom.is_finite() {
+            s.zoom.clamp(ZOOM_MIN, ZOOM_MAX)
+        } else {
+            default_zoom()
+        };
+        cc.egui_ctx.set_zoom_factor(zoom);
 
         Self {
             // The tuner always boots off (not persisted — see `Settings`).
@@ -138,6 +181,14 @@ impl Tm2077App {
             tap_times: Vector::new(),
             theme: s.theme,
             settings_open: false,
+            // Restore the persisted on-set, but never a both-off value (which
+            // would leave the space bar with nothing to bring back) — fall back
+            // to the metronome default.
+            last_on: match s.last_on {
+                (false, false) => default_last_on(),
+                on => on,
+            },
+            zoom,
         }
     }
 
@@ -151,6 +202,8 @@ impl Tm2077App {
             transpose: self.tuner.transpose,
             tempo_graduated: self.metronome.graduated,
             sound: self.metronome.sound,
+            last_on: self.last_on,
+            zoom: self.zoom,
         }
     }
 
@@ -198,13 +251,24 @@ impl Tm2077App {
         // Scroll-to-zoom (mouse wheel / trackpad) and pinch-to-zoom (two-finger on
         // touchscreens, ctrl+scroll on desktop) both scale the whole UI together.
         if scroll != 0.0 || pinch != 1.0 {
-            let z = (ui.ctx().zoom_factor() * pinch * (scroll * 0.0015).exp()).clamp(0.4, 4.0);
+            let z = (ui.ctx().zoom_factor() * pinch * (scroll * 0.0015).exp())
+                .clamp(ZOOM_MIN, ZOOM_MAX);
             ui.ctx().set_zoom_factor(z);
         }
+        // Mirror the live zoom so `save` can persist it (it has no context).
+        self.zoom = ui.ctx().zoom_factor();
 
-        // Space bar plays/pauses the metronome (works even with settings open).
+        // Space bar is a global play/pause across both instruments (works even
+        // with settings open): if either the tuner or the metronome is on it
+        // stops both; if both are off it restores whichever were on last (see
+        // `last_on`).
         if space {
-            self.metronome.running = !self.metronome.running;
+            if self.tuner_on || self.metronome.running {
+                self.tuner_on = false;
+                self.metronome.running = false;
+            } else {
+                (self.tuner_on, self.metronome.running) = self.last_on;
+            }
         }
 
         // Drive continuous repaints only while something animates (beat dots /
@@ -440,6 +504,14 @@ impl eframe::App for Tm2077App {
 
         // Draw + handle controls (may toggle running, change bpm, a4, tap, …).
         ui::draw_device(ui, self);
+
+        // Remember the current on-set (however it was reached — space or the
+        // pills) whenever at least one instrument is on, so a later space press
+        // that stopped both can restore it. Both-off is never recorded, so
+        // `last_on` always holds the last thing that was actually running.
+        if self.tuner_on || self.metronome.running {
+            self.last_on = (self.tuner_on, self.metronome.running);
+        }
 
         // Push the (possibly updated) UI settings back to the engine.
         self.audio.metronome_set(
