@@ -1,10 +1,14 @@
 # TM-2077
 
+[![CI](https://github.com/theolaurent/TM-2077/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/theolaurent/TM-2077/actions/workflows/ci.yml)
+[![Deployment](https://github.com/theolaurent/TM-2077/actions/workflows/deploy.yml/badge.svg?branch=main)](https://github.com/theolaurent/TM-2077/actions/workflows/deploy.yml)
+
+
 A metronome / tuner combo, inspired by a well known brand's device.
 Featuring chromatic, guitar and quarter tone modes.
 
 Written in Rust, it runs as a native desktop app and in the browser
-(deployed at https://theolaurent.github.io/TM-2077/ ).
+(deployed at https://theolaurent.github.io/TM-2077/).
 
 ## Build native
 
