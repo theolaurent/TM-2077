@@ -4,7 +4,7 @@
 
 use egui::{Align2, FontId, Rect, pos2, vec2};
 
-use super::{glyphs, icon_button, label, pill, rel_rect, rocker, round_button};
+use super::{frac_pos, glyphs, icon_button, label, pill, rel_rect, rocker, round_button};
 use crate::app::{
     A4_MAX, A4_MIN, BEATS_MAX, BPM_MAX, BPM_MIN, Tm2077App, next_graduation, prev_graduation,
 };
@@ -17,14 +17,14 @@ const SQUARE: f32 = 0.06;
 /// A single square button rect, centred at the given device-fraction position.
 fn sq(d: Rect, cx: f32, cy: f32) -> Rect {
     let side = d.width() * SQUARE;
-    let c = pos2(d.min.x + d.width() * cx, d.min.y + d.height() * cy);
+    let c = frac_pos(d, cx, cy);
     Rect::from_center_size(c, vec2(side, side))
 }
 
 /// A rocker rect: two stacked square buttons, centred at the given position.
 fn sq_rocker(d: Rect, cx: f32, cy: f32) -> Rect {
     let side = d.width() * SQUARE;
-    let c = pos2(d.min.x + d.width() * cx, d.min.y + d.height() * cy);
+    let c = frac_pos(d, cx, cy);
     Rect::from_center_size(c, vec2(side, side * 2.0))
 }
 
@@ -86,7 +86,7 @@ fn left_column(ui: &mut egui::Ui, p: &egui::Painter, d: Rect, app: &mut Tm2077Ap
     // CALIB·NOTE rocker (A4 calibration).
     label(
         p,
-        pos2(d.min.x + d.width() * 0.115, d.min.y + d.height() * 0.24),
+        frac_pos(d, 0.115, 0.24),
         Align2::CENTER_CENTER,
         "CALIB · NOTE",
         10.0,
@@ -112,7 +112,7 @@ fn right_column(ui: &mut egui::Ui, p: &egui::Painter, d: Rect, app: &mut Tm2077A
     // BEAT and TEMPO rockers, side by side.
     label(
         p,
-        pos2(d.min.x + d.width() * 0.85, d.min.y + d.height() * 0.24),
+        frac_pos(d, 0.85, 0.24),
         Align2::CENTER_CENTER,
         "BEAT",
         10.0,
@@ -120,7 +120,7 @@ fn right_column(ui: &mut egui::Ui, p: &egui::Painter, d: Rect, app: &mut Tm2077A
     );
     label(
         p,
-        pos2(d.min.x + d.width() * 0.925, d.min.y + d.height() * 0.24),
+        frac_pos(d, 0.925, 0.24),
         Align2::CENTER_CENTER,
         "TEMPO",
         10.0,
@@ -170,7 +170,7 @@ fn right_column(ui: &mut egui::Ui, p: &egui::Painter, d: Rect, app: &mut Tm2077A
 fn centre(ui: &mut egui::Ui, p: &egui::Painter, d: Rect, app: &mut Tm2077App) {
     let t = theme::palette(p);
     // TAP TEMPO (red round button).
-    let tap_c = pos2(d.min.x + d.width() * 0.66, d.min.y + d.height() * 0.79);
+    let tap_c = frac_pos(d, 0.66, 0.79);
     label(
         p,
         pos2(tap_c.x, tap_c.y - d.height() * 0.135),
@@ -187,14 +187,14 @@ fn centre(ui: &mut egui::Ui, p: &egui::Painter, d: Rect, app: &mut Tm2077App) {
 
     // Wordmark, bottom-left of centre.
     p.text(
-        pos2(d.min.x + d.width() * 0.235, d.min.y + d.height() * 0.90),
+        frac_pos(d, 0.235, 0.90),
         Align2::LEFT_CENTER,
         "TM-2077",
         FontId::proportional(22.0),
         t.body_label,
     );
     p.text(
-        pos2(d.min.x + d.width() * 0.235, d.min.y + d.height() * 0.955),
+        frac_pos(d, 0.235, 0.955),
         Align2::LEFT_CENTER,
         "COMBO TUNER · METRONOME",
         FontId::proportional(10.0),

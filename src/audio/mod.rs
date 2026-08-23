@@ -3,12 +3,19 @@
 
 mod metronome;
 mod pitch;
-mod tuner;
 
 #[cfg(not(target_arch = "wasm32"))]
 mod tuner_native;
 #[cfg(target_arch = "wasm32")]
 mod tuner_web;
+
+// The tuner is a platform backend used directly (cpal input on native,
+// getUserMedia + AnalyserNode on web). `AudioEngine` is the single facade over
+// it and the metronome, so the backend needs no extra wrapper layer.
+#[cfg(not(target_arch = "wasm32"))]
+use tuner_native::NativeTuner as Tuner;
+#[cfg(target_arch = "wasm32")]
+use tuner_web::WebTuner as Tuner;
 
 pub use metronome::Sound;
 
@@ -16,14 +23,14 @@ use crate::note::NoteReading;
 
 pub struct AudioEngine {
     metronome: metronome::Metronome,
-    tuner: tuner::Tuner,
+    tuner: Tuner,
 }
 
 impl AudioEngine {
     pub fn new() -> Self {
         Self {
             metronome: metronome::Metronome::new(),
-            tuner: tuner::Tuner::new(),
+            tuner: Tuner::new(),
         }
     }
 

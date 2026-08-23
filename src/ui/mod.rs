@@ -116,6 +116,12 @@ pub(crate) fn rel_rect(r: Rect, x0: f32, y0: f32, x1: f32, y1: f32) -> Rect {
     )
 }
 
+/// A point inside `r` at fractional [0,1] coordinates — the point analogue of
+/// [`rel_rect`], used to place labels and controls on the device face.
+pub(crate) fn frac_pos(r: Rect, fx: f32, fy: f32) -> Pos2 {
+    pos2(r.min.x + r.width() * fx, r.min.y + r.height() * fy)
+}
+
 // ---------------------------------------------------------------------------
 // Shared widgets
 // ---------------------------------------------------------------------------

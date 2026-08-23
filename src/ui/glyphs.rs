@@ -126,12 +126,30 @@ fn flat_bowl(p: &egui::Painter, c: Pos2, h: f32, color: Color32, sign: f32) {
 /// crossed by two thicker upward-slanting bars, both pairs overshooting the
 /// crossing as in a real music sharp.
 pub fn sharp(p: &egui::Painter, c: Pos2, h: f32, color: Color32) {
-    let w = h * 0.5;
+    sharp_bars(p, c, h, color, false);
+}
+
+/// A half-sharp (demisharp): the sharp sign with a single (central) vertical bar.
+pub fn half_sharp(p: &egui::Painter, c: Pos2, h: f32, color: Color32) {
+    sharp_bars(p, c, h, color, true);
+}
+
+/// The sharp glyph, shared by the full and half variants. `single` draws the
+/// half-sharp — one central upright and a narrower, less-slanted body — while the
+/// full sharp gets two flanking uprights; the two rising crossbars are common.
+fn sharp_bars(p: &egui::Painter, c: Pos2, h: f32, color: Color32, single: bool) {
     // Horizontals are distinctly heavier than the uprights, as in a real sharp.
     let v_stroke = Stroke::new((h * 0.11).max(1.0), color);
     let h_stroke = Stroke::new((h * 0.30).max(1.8), color);
-    // Two vertical bars, overshooting top and bottom.
-    for dx in [-w * 0.5, w * 0.5] {
+    // The half-sharp is narrower and its crossbars slant less.
+    let (w, slant) = if single {
+        (h * 0.28, h * 0.09)
+    } else {
+        (h * 0.5, h * 0.16)
+    };
+
+    // Vertical bar(s), overshooting top and bottom.
+    let upright = |dx: f32| {
         p.line_segment(
             [
                 pos2(c.x + dx, c.y - h * 1.05),
@@ -139,33 +157,20 @@ pub fn sharp(p: &egui::Painter, c: Pos2, h: f32, color: Color32) {
             ],
             v_stroke,
         );
+    };
+    if single {
+        upright(0.0);
+    } else {
+        upright(-h * 0.25);
+        upright(h * 0.25);
     }
+
     // Two rising horizontal bars.
     for dy in [-h * 0.36, h * 0.36] {
         p.line_segment(
             [
-                pos2(c.x - w, c.y + dy + h * 0.16),
-                pos2(c.x + w, c.y + dy - h * 0.16),
-            ],
-            h_stroke,
-        );
-    }
-}
-
-/// A half-sharp (demisharp): the sharp sign with a single (central) vertical bar.
-pub fn half_sharp(p: &egui::Painter, c: Pos2, h: f32, color: Color32) {
-    let w = h * 0.28;
-    let v_stroke = Stroke::new((h * 0.11).max(1.0), color);
-    let h_stroke = Stroke::new((h * 0.30).max(1.8), color);
-    p.line_segment(
-        [pos2(c.x, c.y - h * 1.05), pos2(c.x, c.y + h * 1.05)],
-        v_stroke,
-    );
-    for dy in [-h * 0.36, h * 0.36] {
-        p.line_segment(
-            [
-                pos2(c.x - w, c.y + dy + h * 0.09),
-                pos2(c.x + w, c.y + dy - h * 0.09),
+                pos2(c.x - w, c.y + dy + slant),
+                pos2(c.x + w, c.y + dy - slant),
             ],
             h_stroke,
         );
