@@ -1,7 +1,6 @@
-//! Native tuner backend: a cpal input stream forwards recent mic samples over a
-//! bounded SPSC channel to `poll()`, which reassembles them into a rolling
-//! window and runs the shared pitch detector. Message passing (not a shared,
-//! locked buffer) keeps the audio callback lock-free and allocation-free.
+//! Native tuner backend: a cpal input stream sends mic samples over a bounded
+//! SPSC channel to `poll()`, which reassembles a rolling window and runs the
+//! shared detector. Message passing keeps the callback lock-free and alloc-free.
 
 use std::sync::mpsc::{Receiver, sync_channel};
 
@@ -12,15 +11,14 @@ use cpal::{FromSample, Sample, SizedSample};
 use crate::audio::pitch::{PitchTracker, WINDOW};
 use crate::note::{NoteReading, Scale, Transposition};
 
-/// How many recent samples the consumer keeps available to the detector (twice
-/// the analysis window, for slack).
+/// Recent samples the consumer keeps for the detector (twice the window, for slack).
 const RING_CAP: usize = WINDOW * 2;
 
-/// Samples per message block handed from the audio callback to the consumer.
+/// Samples per message block handed from the callback to the consumer.
 const BLOCK: usize = 128;
 
-/// Channel depth in blocks (~170 ms at 48 kHz) — ample slack between UI frames,
-/// so blocks are only ever dropped if `poll` stalls (e.g. a minimised window).
+/// Channel depth in blocks (~170 ms at 48 kHz); blocks drop only if `poll` stalls
+/// (e.g. a minimised window).
 const CHANNEL_BLOCKS: usize = 64;
 
 pub struct NativeTuner {
@@ -29,8 +27,7 @@ pub struct NativeTuner {
     scale: Scale,
     transpose: Transposition,
     reading: Option<NoteReading>,
-    /// Consumer half of the sample channel: fixed-size blocks sent by the
-    /// audio-input callback. `None` until the stream is built.
+    /// Consumer half of the sample channel; `None` until the stream is built.
     rx: Option<Receiver<[f32; BLOCK]>>,
     /// Consumer-owned rolling window (UI thread only) the detector reads from.
     window: Vec<f32>,
@@ -63,13 +60,12 @@ impl NativeTuner {
         self.enabled = on;
         if !on {
             self.reading = None;
-            // Drop stale samples so a later re-enable starts from fresh audio.
+            // Drop stale samples so a re-enable starts from fresh audio.
             self.window.clear();
         }
-        // Pause the mic capture while the tuner is off — frees the input device
-        // and clears the OS "mic in use" indicator — and resume it when the
-        // tuner comes back on. The stream only exists once a user gesture has
-        // started it (`ensure_started`); before that there is nothing to pause.
+        // Pause/resume mic capture with the tuner: frees the device and clears the
+        // OS "mic in use" indicator while off. The stream exists only after a user
+        // gesture started it (`ensure_started`); before that there's nothing to pause.
         if let Some(stream) = &self.stream {
             // `play`/`pause` return distinct error types, so handle them apart.
             let res = if on {
@@ -115,10 +111,8 @@ impl NativeTuner {
         }
         self.ensure_started();
 
-        // Drain every block the audio callback has sent since the last frame into
-        // the local window, then keep only the most recent `RING_CAP` samples.
-        // This runs on the UI thread, so the trim's memmove (and any growth of
-        // `window`) is harmless — the audio thread does none of it.
+        // Drain all blocks since the last frame into the window, then keep the most
+        // recent `RING_CAP`. On the UI thread, so the trim/growth is off the audio path.
         if let Some(rx) = self.rx.as_ref() {
             while let Ok(block) = rx.try_recv() {
                 self.window.extend_from_slice(&block);
@@ -183,15 +177,13 @@ impl NativeTuner {
         T: SizedSample,
         f32: FromSample<T>,
     {
-        // `.max(1)`: `chunks(0)` panics, and the audio callback must never panic
-        // (see AGENTS.md). Also keeps the mono downmix divisor non-zero.
+        // `.max(1)`: `chunks(0)` panics; also keeps the mono-downmix divisor non-zero.
         let channels = (cfg.channels as usize).max(1);
-        // Bounded channel: the ring of `[f32; BLOCK]` slots is pre-allocated here
-        // (UI thread), so `try_send` in the callback never allocates.
+        // Bounded channel, pre-allocated here so the callback's `try_send` never allocates.
         let (tx, rx) = sync_channel::<[f32; BLOCK]>(CHANNEL_BLOCKS);
 
-        // Per-callback state owned by the closure: accumulate mono samples into a
-        // fixed block, then hand each full block off. No locking, no allocation.
+        // Callback-owned state: accumulate mono samples into a fixed block, then
+        // hand each full block off. No locking, no allocation.
         let mut partial = [0.0f32; BLOCK];
         let mut filled = 0usize;
 
@@ -207,9 +199,8 @@ impl NativeTuner {
                             filled += 1;
                         }
                         if filled == BLOCK {
-                            // Never block the audio thread: drop this block if the
-                            // consumer is behind. `partial` is `Copy`, so the send
-                            // copies it and we refill from index 0.
+                            // Never block the audio thread: drop the block if the
+                            // consumer is behind. `partial` is `Copy`; refill from 0.
                             let _ = tx.try_send(partial);
                             filled = 0;
                         }

@@ -1,6 +1,6 @@
-//! Metronome audio engine. Uses cpal's output stream on both native and web:
-//! a per-sample beat clock in the audio callback emits a short decaying sine
-//! "click" at each beat boundary and reports the current beat back to the UI.
+//! Metronome audio engine (cpal output on native + web). A per-sample beat clock
+//! in the audio callback emits a short "click" at each beat and reports the
+//! current beat back to the UI.
 
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicU8, AtomicU32, Ordering};
@@ -21,8 +21,8 @@ pub enum Sound {
 }
 
 impl Sound {
-    /// Total decode of the atomic representation (`self as u8`); an unknown value
-    /// falls back to the default, so the audio thread never sees an invalid one.
+    /// Decode the atomic representation (`self as u8`); unknown values fall back
+    /// to the default, so the audio thread never sees an invalid one.
     fn from_u8(v: u8) -> Self {
         match v {
             1 => Sound::Mechanical,
@@ -31,21 +31,20 @@ impl Sound {
     }
 }
 
-/// The primary per-beat click. Chosen when a beat fires and held until it
-/// finishes, so a mid-click settings change never switches the waveform partway.
-/// The mechanical downbeat rings a separate bell layer *on top* of the tick.
+/// The primary per-beat click, latched when a beat fires and held until it
+/// finishes so a mid-click settings change never switches waveform partway. The
+/// mechanical downbeat rings a separate bell layer *on top* of the tick.
 #[derive(Clone, Copy)]
 enum Voice {
     /// Electronic beep — a decaying sine.
     Beep,
-    /// Mechanical wooden tick — noise + body. Plays on every mechanical beat.
+    /// Mechanical wooden tick (noise + body), on every mechanical beat.
     Tick,
 }
 
 /// Shared metronome settings: independent atomics the UI writes and the audio
-/// callback reads, all lock-free. The fields carry no cross-field invariant, so
-/// a per-field read that briefly mixes a new value with an old one is harmless —
-/// it self-corrects on the next buffer.
+/// callback reads, lock-free. No cross-field invariant, so a torn read that mixes
+/// old and new values is harmless — it self-corrects next buffer.
 struct Control {
     bpm: AtomicU32,
     beats: AtomicU32,
@@ -53,15 +52,13 @@ struct Control {
 }
 
 pub struct Metronome {
-    /// Latest UI settings, shared as a bundle of atomics: the UI `store`s each
-    /// field, the audio callback `load`s them — a lock-free read on the
-    /// real-time thread, with no mutex to block on or poison.
+    /// Latest UI settings, shared lock-free: UI `store`s, audio callback `load`s.
     control: Arc<Control>,
-    /// Monotonic beat counter, incremented once per beat by the audio callback.
-    /// The UI watches it for beat changes (e.g. to swing the needle).
+    /// Monotonic beat counter bumped once per beat by the audio callback; the UI
+    /// watches it for beat changes (e.g. to swing the needle).
     beat_count: Arc<AtomicU32>,
-    /// Click sound — a user *setting*, not a live transport control, so it lives
-    /// in its own atomic rather than in `Control`. Read by the audio callback.
+    /// Click sound — a *setting*, not live transport, so it has its own atomic
+    /// rather than living in `Control`. Read by the audio callback.
     sound: Arc<AtomicU8>,
     stream: Option<cpal::Stream>,
     started: bool,
@@ -83,8 +80,7 @@ impl Metronome {
     }
 
     /// Push the latest UI settings to the audio thread. The clamps are a
-    /// defensive net against an out-of-range value from any caller; the UI paths
-    /// already keep these within range (see `crate::app` bounds).
+    /// defensive net; the UI paths already keep these in range (`crate::app`).
     pub fn set(&self, bpm: u32, beats: u32, running: bool) {
         use crate::app::{BEATS_MAX, BEATS_MIN, BPM_MAX, BPM_MIN};
         self.control
@@ -96,8 +92,7 @@ impl Metronome {
         self.control.running.store(running, Ordering::Relaxed);
     }
 
-    /// Set the click sound. A setting rather than a live transport control, so it
-    /// has its own setter (like the tuner's `set_scale` / `set_a4`).
+    /// Set the click sound (a setting, so its own setter — cf. the tuner's).
     pub fn set_sound(&self, sound: Sound) {
         self.sound.store(sound as u8, Ordering::Relaxed);
     }
@@ -108,9 +103,9 @@ impl Metronome {
 
     /// Lazily open the audio stream. Must be triggered by a user gesture on web
     /// (autoplay policy); harmless to call repeatedly.
-    // Unlike the tuner (which pauses its input to release the mic), the output
-    // stream stays open for the app's lifetime — the callback emits silence while
-    // stopped — so starting the metronome incurs no device-resume latency.
+    // The output stream stays open for the app's lifetime (callback emits silence
+    // while stopped), so starting incurs no device-resume latency — unlike the
+    // tuner, which pauses its input to release the mic.
     pub fn ensure_started(&mut self) {
         if self.started {
             return;
@@ -151,8 +146,7 @@ impl Metronome {
         T: SizedSample + FromSample<f32>,
     {
         let sample_rate = cfg.sample_rate.0 as f32;
-        // `.max(1)`: `chunks_mut(0)` panics, and the audio callback must never
-        // panic (see AGENTS.md). Guards a device that reports zero channels.
+        // `.max(1)`: `chunks_mut(0)` panics; guards a zero-channel device.
         let channels = (cfg.channels as usize).max(1);
         let control = self.control.clone();
         let beat_count = self.beat_count.clone();
@@ -166,7 +160,7 @@ impl Metronome {
         let mut env: f32 = 0.0;
         let mut phase: f32 = 0.0;
         let mut freq: f32 = 0.0;
-        let mut voice = Voice::Beep; // which click is currently sounding
+        let mut voice = Voice::Beep; // click currently sounding
         let mut rng: u32 = 0x9E37_79B9; // xorshift state for the mechanical noise
         // Bell accent layer (mechanical downbeat), summed on top of the tick.
         let mut bell_env: f32 = 0.0;
@@ -183,9 +177,7 @@ impl Metronome {
             .build_output_stream(
                 cfg,
                 move |data: &mut [T], _: &cpal::OutputCallbackInfo| {
-                    // Lock-free reads of the latest UI settings — no lock to
-                    // block on or poison, so nothing to fail and no silence
-                    // fallback. Read once per buffer into locals.
+                    // Lock-free reads of the latest UI settings, once per buffer.
                     let running = control.running.load(Ordering::Relaxed);
                     let bpm = control.bpm.load(Ordering::Relaxed);
                     let beats = control.beats.load(Ordering::Relaxed);
@@ -203,15 +195,13 @@ impl Metronome {
                             samples_since_beat += 1.0;
                             if samples_since_beat >= spb {
                                 samples_since_beat -= spb;
-                                // beats == 0 means no accent: every beat is a
-                                // plain tick (no downbeat, no bell).
+                                // beats == 0: no accent — every beat a plain tick.
                                 let downbeat = beats != 0 && beat_index == 0;
                                 let (beat_voice, beat_freq) = match (sound, downbeat) {
                                     (Sound::Electronic, true) => (Voice::Beep, 1000.0),
                                     (Sound::Electronic, false) => (Voice::Beep, 800.0),
-                                    // Mechanical: the wooden tick is the same on
-                                    // every beat; the downbeat's accent is the
-                                    // bell layer triggered below.
+                                    // Mechanical tick is identical every beat; the
+                                    // downbeat accent is the bell layer below.
                                     (Sound::Mechanical, _) => (Voice::Tick, 1500.0),
                                 };
                                 voice = beat_voice;
@@ -219,8 +209,7 @@ impl Metronome {
                                 env = 1.0;
                                 phase = 0.0;
 
-                                // Ring the bike bell on the mechanical downbeat,
-                                // mixed on top of the tick.
+                                // Ring the bike bell on the mechanical downbeat.
                                 if downbeat && matches!(sound, Sound::Mechanical) {
                                     bell_env = 1.0;
                                     bell_phase = 0.0;
@@ -238,9 +227,8 @@ impl Metronome {
                             let v = match voice {
                                 Voice::Beep => ph.sin() * env * 0.6,
                                 Voice::Tick => {
-                                    // Broadband noise gives the tick its "wooden
-                                    // knock" character; the pitched body adds a
-                                    // little resonance.
+                                    // Broadband noise = "wooden knock"; the pitched
+                                    // body adds a little resonance.
                                     let noise = noise_sample(&mut rng);
                                     (ph.sin() * 0.5 + noise * 0.5) * env * 0.7
                                 }
@@ -254,10 +242,9 @@ impl Metronome {
                             0.0
                         };
 
-                        // Bike-bell accent, summed on top of the mechanical
-                        // downbeat: bright inharmonic partials with a slow-beating
-                        // shimmer (the near-unison 5.40/5.405 pair), ringing out
-                        // over the tick.
+                        // Bike-bell accent over the mechanical downbeat: bright
+                        // inharmonic partials with a slow-beating shimmer (the
+                        // near-unison 5.40/5.405 pair).
                         let bell = if bell_env > 0.0 {
                             bell_phase += bell_freq / sample_rate;
                             let bp = bell_phase * std::f32::consts::TAU;
@@ -290,8 +277,8 @@ impl Metronome {
     }
 }
 
-/// One white-noise sample in [-1, 1] from a fast xorshift PRNG — allocation-free
-/// and audio-thread safe. `state` must stay non-zero.
+/// One white-noise sample in [-1, 1] from a fast xorshift PRNG (allocation-free,
+/// audio-thread safe). `state` must stay non-zero.
 fn noise_sample(state: &mut u32) -> f32 {
     let mut x = *state;
     x ^= x << 13;

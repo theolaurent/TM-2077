@@ -1,7 +1,6 @@
 //! Web tuner backend: `getUserMedia` → `MediaStreamAudioSourceNode` →
-//! `AnalyserNode`. Each `poll()` reads the analyser's time-domain buffer and
-//! runs it through the shared pitch detector. cpal has no released WASM input
-//! backend, so this uses web-sys directly.
+//! `AnalyserNode`. Each `poll()` reads the analyser's time-domain buffer through
+//! the shared detector. Uses web-sys directly — cpal has no released WASM input.
 
 use std::cell::{Cell, RefCell};
 use std::rc::Rc;
@@ -20,21 +19,19 @@ pub struct WebTuner {
     transpose: Transposition,
     reading: Option<NoteReading>,
     analyser: Rc<RefCell<Option<AnalyserNode>>>,
-    /// The live mic stream, kept so its tracks can be stopped when the tuner is
-    /// turned off (which frees the device and clears the browser "mic in use"
-    /// indicator). `None` while no mic is captured.
+    /// Live mic stream, kept so its tracks can be stopped when the tuner turns off
+    /// (frees the device, clears the browser "mic in use" indicator). `None` when
+    /// no mic is captured.
     stream: Rc<RefCell<Option<MediaStream>>>,
-    /// Bumped on every acquire *and* every release. The async `getUserMedia`
-    /// closure captures the generation it was started in and only keeps the mic
-    /// if it still matches — so a stream that arrives after the tuner was turned
-    /// off (or re-toggled) is stopped immediately instead of leaking a live mic.
+    /// Bumped on every acquire *and* release. The async `getUserMedia` closure
+    /// captures the generation it started in and keeps the mic only if it still
+    /// matches — so a stream arriving after an off/re-toggle is stopped, not leaked.
     generation: Rc<Cell<u64>>,
     ctx: Option<AudioContext>,
     tracker: Option<PitchTracker>,
     buf: Vec<f32>,
-    /// Whether a mic acquisition is already in flight or established, so repeated
-    /// user gestures don't kick off duplicate `getUserMedia` calls. Reset on
-    /// release so the next enable re-acquires.
+    /// Mic acquisition in flight or established, so repeated gestures don't fire
+    /// duplicate `getUserMedia` calls. Reset on release so the next enable re-acquires.
     requested: bool,
 }
 
@@ -63,17 +60,15 @@ impl WebTuner {
         }
         self.enabled = on;
         if on {
-            // The mic itself is (re)acquired on the next user gesture, via
-            // `on_user_gesture` → `request_mic`; just wake the graph here.
+            // The mic is (re)acquired on the next gesture (`on_user_gesture` →
+            // `request_mic`); just wake the graph here.
             if let Some(ctx) = &self.ctx {
                 let _ = ctx.resume();
             }
         } else {
             self.reading = None;
-            // Fully release the mic — parity with the native backend, which
-            // pauses the input device. Stops every track (clearing the OS "mic
-            // in use" indicator), drops the analyser, and lets a later enable
-            // acquire afresh.
+            // Fully release the mic (parity with the native backend): stops every
+            // track, drops the analyser, lets a later enable re-acquire.
             self.release_mic();
         }
     }
@@ -135,9 +130,8 @@ impl WebTuner {
         }
     }
 
-    /// Stop the mic capture and release the device. Invalidates any in-flight
-    /// `getUserMedia` (via the generation bump) so a late-arriving stream is
-    /// stopped rather than kept.
+    /// Stop mic capture and release the device. The generation bump invalidates
+    /// any in-flight `getUserMedia` so a late stream is stopped, not kept.
     fn release_mic(&mut self) {
         self.generation.set(self.generation.get().wrapping_add(1));
         if let Ok(mut slot) = self.stream.try_borrow_mut()
@@ -160,13 +154,12 @@ impl WebTuner {
             return;
         }
         self.requested = true;
-        // This acquisition's generation; the async closure keeps the mic only if
-        // it still matches when the stream arrives.
+        // This acquisition's generation; the closure keeps the mic only if it
+        // still matches when the stream arrives.
         self.generation.set(self.generation.get().wrapping_add(1));
         let my_gen = self.generation.get();
 
-        // Reuse the AudioContext across enable/disable cycles — creating a fresh
-        // one per toggle would leak them. Make one on first use.
+        // Reuse the AudioContext across toggles (a fresh one each time would leak).
         let ctx = match &self.ctx {
             Some(c) => c.clone(),
             None => match AudioContext::new() {
@@ -214,8 +207,8 @@ impl WebTuner {
             match JsFuture::from(promise).await {
                 Ok(stream_val) => {
                     let stream: MediaStream = stream_val.unchecked_into();
-                    // Turned off (or re-toggled) while the prompt was pending:
-                    // release this stream instead of leaving the mic live.
+                    // Off (or re-toggled) while the prompt was pending: release
+                    // this stream instead of leaving the mic live.
                     if generation.get() != my_gen {
                         stop_tracks(&stream);
                         return;

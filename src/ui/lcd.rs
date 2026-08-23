@@ -11,8 +11,7 @@ use crate::theme;
 /// Shrink factor applied to the 7-segment readouts (calib / BPM / beat).
 const SEG_SCALE: f32 = 0.65;
 
-/// Scale a rect about its centre — used to fine-tune readout sizes without
-/// moving where they sit on the LCD.
+/// Scale a rect about its centre, to size readouts without moving them.
 fn shrunk(rect: Rect, f: f32) -> Rect {
     Rect::from_center_size(rect.center(), rect.size() * f)
 }
@@ -33,8 +32,7 @@ pub fn draw(p: &egui::Painter, rect: Rect, app: &Tm2077App) {
     tabs(p, rect);
     tuner(p, rect, app);
     metronome(p, rect, app);
-    // Shared analog needle (tuner + metronome), drawn on top of both halves.
-    needle_meter(p, rect, app);
+    needle_meter(p, rect, app); // shared needle, on top of both halves
 }
 
 fn tabs(p: &egui::Painter, r: Rect) {
@@ -63,9 +61,8 @@ fn tuner(p: &egui::Painter, r: Rect, app: &Tm2077App) {
         None
     };
 
-    // A4 calibration readout (7-seg), mirroring the metronome's TEMPO field on
-    // the far side of the LCD. The calib range (410-480 Hz) is always three
-    // digits, so this is a fixed 3-cell field, symmetric with BPM.
+    // A4 calibration readout (7-seg), mirroring BPM on the far side. The calib
+    // range (410-480 Hz) is always 3 digits, so a fixed 3-cell field.
     let hz_rect = shrunk(rel_rect(r, 0.03, 0.15, 0.26, 0.39), SEG_SCALE);
     let a4 = app.tuner.a4.round() as u32;
     seg::number(p, hz_rect, a4, 3, t.lcd_ink);
@@ -77,8 +74,7 @@ fn tuner(p: &egui::Painter, r: Rect, app: &Tm2077App) {
         t.lcd_ink,
     );
 
-    // Note letter as a 14-segment character — one cell, same size as the calib
-    // and BPM digits and aligned to their middle line.
+    // Note letter (14-seg): one cell, sized and middle-aligned to the digits.
     let cell_gap = hz_rect.width() * 0.06 / 3.0;
     let cell_w = (hz_rect.width() - cell_gap * 2.0) / 3.0;
     let note_rect = Rect::from_center_size(
@@ -105,12 +101,11 @@ fn tuner(p: &egui::Painter, r: Rect, app: &Tm2077App) {
 
 fn needle_meter(p: &egui::Painter, r: Rect, app: &Tm2077App) {
     let t = theme::palette(p);
-    // Clip everything to the screen so the (off-screen) pivot doesn't spill.
+    // Clip to the screen so the off-screen pivot doesn't spill.
     let p = p.with_clip_rect(r);
     let h = r.height();
     let cx = r.center().x;
-    // Pivot sits below the LCD so the visible arc is a shallow analog-meter
-    // curve. The offset places the arc vertically; the radius sets its size.
+    // Pivot below the LCD so the visible arc is a shallow analog-meter curve.
     let pivot = pos2(cx, r.max.y + h * 0.57);
     let radius = h * 1.05;
     let max = 32f32.to_radians();
@@ -127,7 +122,7 @@ fn needle_meter(p: &egui::Painter, r: Rect, app: &Tm2077App) {
     // Fixed centre reference marker.
     glyphs::marker_down(&p, pivot + dir(0.0) * (radius + 11.0), 5.5, t.lcd_ink);
 
-    // Scale end labels near the arc ends.
+    // Scale end labels.
     p.text(
         pivot + dir(-max) * radius + vec2(-2.0, 10.0),
         Align2::CENTER_CENTER,
@@ -144,18 +139,15 @@ fn needle_meter(p: &egui::Painter, r: Rect, app: &Tm2077App) {
     );
 
     // --- Shared needle ---
-    // The tuner deflects the needle by cents; the metronome swings it side to
-    // side, reaching an extreme on every beat. With both active the needle
-    // hinges at its visible midpoint — the metronome drives the lower half, the
-    // tuner the upper half; with only one active both halves share that angle so
-    // the whole needle moves as one.
+    // Tuner deflects by cents; metronome swings to an extreme on every beat. With
+    // both active the needle hinges at its midpoint (metronome drives the lower
+    // half, tuner the upper); with one active both halves share its angle.
     let ctx = p.ctx();
 
     let tuner_on = app.tuner_on;
-    // Ease the tuner needle toward the reading rather than snapping to it: the
-    // pitch estimate wobbles a cent or two frame-to-frame, and a raw mapping makes
-    // the needle twitch. A short time-constant low-passes that jitter while still
-    // tracking real pitch changes. Off (or no note) rests at centre.
+    // Ease toward the reading (don't snap): the pitch estimate wobbles a cent or
+    // two per frame, and a short time-constant low-passes that jitter while still
+    // tracking real changes. Off (or no note) rests at centre.
     const TUNER_EASE: f32 = 0.08;
     let tuner_id = egui::Id::new("tuner_needle_ang");
     let tuner_target = if tuner_on {
@@ -166,8 +158,7 @@ fn needle_meter(p: &egui::Painter, r: Rect, app: &Tm2077App) {
     } else {
         0.0
     };
-    // While the tuner is off, snap (time 0) so a later re-enable starts at centre
-    // instead of easing over from a stale angle.
+    // Off: snap (time 0) so a re-enable starts at centre, not from a stale angle.
     let tuner_ang = ctx.animate_value_with_time(
         tuner_id,
         tuner_target,
@@ -175,16 +166,15 @@ fn needle_meter(p: &egui::Painter, r: Rect, app: &Tm2077App) {
     );
 
     let metro_on = app.metronome.running;
-    // Flip the swing side every time the audio beat advances (works for any
-    // metre), then let egui ease the needle toward that extreme over one beat.
+    // Flip the swing side on every beat advance (any metre), then ease toward it.
     let side_id = egui::Id::new("metro_swing_side");
     let last_id = egui::Id::new("metro_last_beat");
     let swing_id = egui::Id::new("metro_swing");
     let beat = app.metronome.beat_count;
     let side = ctx.memory_mut(|m| {
         if !metro_on {
-            // Idle: park on the left and record the current beat, so the first
-            // beat sweeps fully right instead of a half-swing from centre.
+            // Idle: park left and record the beat, so the first beat sweeps
+            // fully right instead of a half-swing from centre.
             m.data.insert_temp(last_id, beat);
             m.data.insert_temp(side_id, -1.0f32);
             return -1.0f32;
@@ -201,9 +191,8 @@ fn needle_meter(p: &egui::Painter, r: Rect, app: &Tm2077App) {
         }
         side
     });
-    // Ease the swing over one whole beat. The upper bound is the beat period at
-    // the slowest tempo (BPM_MIN), so the needle tracks the beat exactly across
-    // the whole range instead of reaching its extreme early below 60 bpm.
+    // Ease over one whole beat. Clamp to BPM_MIN's period so the needle tracks
+    // the beat across the whole range, not reaching its extreme early below 60 bpm.
     let beat_secs = (60.0 / app.metronome.bpm.max(1) as f32).clamp(0.05, 60.0 / BPM_MIN as f32);
     let metro_ang = if metro_on {
         ctx.animate_value_with_time(swing_id, side * max, beat_secs)
@@ -212,34 +201,31 @@ fn needle_meter(p: &egui::Painter, r: Rect, app: &Tm2077App) {
         ctx.animate_value_with_time(swing_id, -max, 0.0)
     };
 
-    // Two independent needles sharing the pivot: the outer (top) band is the
-    // tuner's needle, the inner (bottom) band the metronome's — each just the
-    // usual full-scale needle, truncated to its half. When only one instrument
-    // is active it owns both bands, i.e. the whole needle.
+    // Two needles sharing the pivot, each a full-scale needle truncated to its
+    // half: outer (top) = tuner, inner (bottom) = metronome. One active → it owns
+    // both bands, i.e. the whole needle.
     let top_ang = if tuner_on { tuner_ang } else { metro_ang };
     let bottom_ang = if metro_on { metro_ang } else { tuner_ang };
 
-    // Only draw the needle when an instrument is active (no idle resting line).
+    // Only draw when an instrument is active (no idle resting line).
     if tuner_on || metro_on {
-        // Radial split: ~30% of the visible needle for the metronome (inner),
-        // ~70% for the tuner (outer). The visible needle starts near s=0.54
-        // (pivot is off-screen), so 0.68 gives the 30/70 division.
+        // Radial split: ~30% metronome (inner), ~70% tuner (outer). The visible
+        // needle starts near s=0.54 (pivot off-screen), so 0.68 gives 30/70.
         const SPLIT: f32 = 0.68;
         let split_r = radius * SPLIT;
-        // Small gaps: between the needle tip and the arc, and — only when both
-        // instruments drive the needle — between the two bands at the split.
+        // Gaps: needle tip to arc, and — only when both drive it — between bands.
         let tip_gap = radius * 0.04;
         let split_gap = if tuner_on && metro_on {
             radius * 0.007
         } else {
             0.0
         };
-        // Bottom band (pivot → below the split): metronome.
+        // Bottom band (pivot → split): metronome.
         p.line_segment(
             [pivot, pivot + dir(bottom_ang) * (split_r - split_gap)],
             Stroke::new(3.6, t.lcd_ink),
         );
-        // Top band (above the split → just short of the arc): tuner.
+        // Top band (split → just short of the arc): tuner.
         p.line_segment(
             [
                 pivot + dir(top_ang) * (split_r + split_gap),
@@ -257,8 +243,7 @@ fn metronome(p: &egui::Painter, r: Rect, app: &Tm2077App) {
     let t = theme::palette(p);
     let m = &app.metronome;
 
-    // Tempo number (7-seg) with a "BPM" label — same gap / middle-line
-    // alignment as the other readouts.
+    // Tempo number (7-seg) with a "BPM" label.
     let bpm_rect = shrunk(rel_rect(r, 0.74, 0.15, 0.97, 0.39), SEG_SCALE);
     seg::number(p, bpm_rect, m.bpm, 3, t.lcd_ink);
     p.text(
@@ -269,8 +254,7 @@ fn metronome(p: &egui::Painter, r: Rect, app: &Tm2077App) {
         t.lcd_ink,
     );
 
-    // "BEAT" + beats-per-bar: right-aligned to the BPM display and tucked just
-    // below it. Two cells: BEAT goes up to 12 (a single cell would truncate).
+    // "BEAT" + beats-per-bar, right-aligned under BPM. Two cells: goes up to 12.
     let beat_w = bpm_rect.width() * 0.40;
     let beat_h = bpm_rect.height() * 0.60;
     let beat_rect = Rect::from_min_size(

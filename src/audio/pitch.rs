@@ -1,15 +1,13 @@
-//! Shared pitch detection: turns a window of PCM samples into a fundamental
-//! frequency using the McLeod (MPM) method, which is well suited to the
-//! single-voice, monophonic signal of an instrument being tuned.
+//! Shared pitch detection: a window of PCM samples → a fundamental frequency via
+//! the McLeod (MPM) method, well suited to a monophonic instrument signal.
 
 use pitch_detection::detector::PitchDetector;
 use pitch_detection::detector::mcleod::McLeodDetector;
 
 /// Analysis window size (samples). ~85 ms at 48 kHz: long enough to resolve low
-/// notes and to give a *stable* estimate (a shorter window jitters more cycle to
-/// cycle, which the display smoothing then has to hide), still short enough to
-/// track real pitch changes. Must be a power of two (the web `AnalyserNode` FFT
-/// size). The needle's residual jitter is smoothed on the display side too.
+/// notes and give a stable estimate, short enough to track real pitch changes.
+/// Must be a power of two (the web `AnalyserNode` FFT size). Residual jitter is
+/// smoothed on the display side.
 pub const WINDOW: usize = 4096;
 
 pub struct PitchTracker {
@@ -28,8 +26,7 @@ impl PitchTracker {
     /// Detect the fundamental from the most recent `WINDOW` samples of `buf`.
     /// Returns `None` on silence or an unclear (noisy/polyphonic) signal.
     pub fn detect(&mut self, buf: &[f32]) -> Option<f32> {
-        // `.get` (not `buf[..]`): keeps the no-panic-by-construction posture even
-        // though the length is already checked — matches the rest of the codebase.
+        // `.get` (not `buf[..]`) to stay no-panic-by-construction.
         let window = buf.get(buf.len().saturating_sub(WINDOW)..)?;
         if window.len() < WINDOW {
             return None;
@@ -41,8 +38,7 @@ impl PitchTracker {
             return None;
         }
 
-        // power_threshold scales with the window energy; clarity rejects
-        // ambiguous (non-tonal) input.
+        // power_threshold scales with window energy; clarity rejects non-tonal input.
         const POWER_THRESHOLD: f32 = 0.15;
         const CLARITY_THRESHOLD: f32 = 0.6;
         self.detector

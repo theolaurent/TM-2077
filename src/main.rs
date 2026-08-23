@@ -1,5 +1,4 @@
-// Crate-wide lints — the no-`unsafe`, no-panic policy (see AGENTS.md) — live in
-// the `[lints]` table of `Cargo.toml` rather than as `#![...]` attributes here.
+// Crate-wide lints (no-`unsafe`, no-panic) live in `Cargo.toml`'s `[lints]`.
 
 mod app;
 mod audio;
@@ -9,9 +8,7 @@ mod ui;
 
 pub use app::Tm2077App;
 
-// ---------------------------------------------------------------------------
-// Native entry point (desktop: Linux / macOS / Windows)
-// ---------------------------------------------------------------------------
+// Native entry point (desktop: Linux / macOS / Windows).
 #[cfg(not(target_arch = "wasm32"))]
 fn main() -> eframe::Result {
     env_logger::init();
@@ -31,14 +28,12 @@ fn main() -> eframe::Result {
     )
 }
 
-// ---------------------------------------------------------------------------
-// Web entry point (wasm via `trunk serve`)
-// ---------------------------------------------------------------------------
+// Web entry point (wasm via `trunk serve`).
 #[cfg(target_arch = "wasm32")]
 fn main() {
     use eframe::wasm_bindgen::JsCast as _;
 
-    // Show panics in the browser console instead of a cryptic "unreachable".
+    // Surface panics in the browser console instead of a cryptic "unreachable".
     console_error_panic_hook::set_once();
     eframe::WebLogger::init(log::LevelFilter::Debug).ok();
 
@@ -66,7 +61,7 @@ fn main() {
             )
             .await;
 
-        // Drop the "booting…" placeholder once egui takes over.
+        // Drop the "booting…" placeholder once egui takes over (or show an error).
         if let Some(loading) = document.get_element_by_id("loading") {
             match start_result {
                 Ok(_) => loading.remove(),

@@ -11,7 +11,7 @@ use crate::app::{
 use crate::theme;
 
 /// Side of the square rubber buttons (rocker arrows + gear), as a fraction of
-/// device width — so they come out square in pixels regardless of aspect.
+/// device width — square in pixels regardless of aspect.
 const SQUARE: f32 = 0.06;
 
 /// A single square button rect, centred at the given device-fraction position.
@@ -34,11 +34,10 @@ pub fn draw(ui: &mut egui::Ui, p: &egui::Painter, d: Rect, _lcd: Rect, app: &mut
     centre(ui, p, d, app);
 }
 
-/// Fires once when a button is pressed, then repeatedly while it is held (after
-/// a short delay) — used to make the rockers auto-repeat. The hold is latched
-/// when the press starts on the button, then kept alive by the *global* pointer
-/// state until release (egui drops a click-only widget's own "down" flag once it
-/// treats the press as a drag).
+/// Auto-repeat for the rockers: fires on press, then repeatedly while held (after
+/// a delay). Latched when the press starts on the button, then kept alive by the
+/// *global* pointer state — egui drops a click-only widget's own "down" flag once
+/// it treats the press as a drag.
 fn repeat_fire(ui: &egui::Ui, resp: &egui::Response) -> bool {
     const DELAY: f64 = 0.35; // hold time before auto-repeat starts
     const INTERVAL: f64 = 0.05; // repeat period once going
@@ -55,7 +54,7 @@ fn repeat_fire(ui: &egui::Ui, resp: &egui::Response) -> bool {
     ui.ctx().request_repaint();
 
     match state {
-        // Begin a hold only if the press actually started on this button.
+        // Begin a hold only if the press started on this button.
         None => {
             if resp.is_pointer_button_down_on() {
                 ui.ctx().memory_mut(|m| m.data.insert_temp(id, (now, now)));
@@ -77,7 +76,7 @@ fn repeat_fire(ui: &egui::Ui, resp: &egui::Response) -> bool {
 }
 
 fn left_column(ui: &mut egui::Ui, p: &egui::Painter, d: Rect, app: &mut Tm2077App) {
-    // TUNER toggle pill (label inside; whole button lights amber when on).
+    // TUNER toggle pill (lights amber when on).
     let tuner_pill = rel_rect(d, 0.035, 0.06, 0.195, 0.15);
     if pill(ui, p, tuner_pill, "TUNER", app.tuner_on).clicked() {
         app.tuner_on = !app.tuner_on;
@@ -103,7 +102,7 @@ fn left_column(ui: &mut egui::Ui, p: &egui::Painter, d: Rect, app: &mut Tm2077Ap
 }
 
 fn right_column(ui: &mut egui::Ui, p: &egui::Painter, d: Rect, app: &mut Tm2077App) {
-    // METRONOME toggle pill (starts/stops; label inside, lights amber when on).
+    // METRONOME toggle pill (starts/stops; lights amber when on).
     let metro_pill = rel_rect(d, 0.805, 0.06, 0.965, 0.15);
     if pill(ui, p, metro_pill, "METRONOME", app.metronome.running).clicked() {
         app.metronome.running = !app.metronome.running;
@@ -151,8 +150,7 @@ fn right_column(ui: &mut egui::Ui, p: &egui::Painter, d: Rect, app: &mut Tm2077A
         };
     }
 
-    // Settings gear — a push-button in the bottom-right corner that opens the
-    // settings popup.
+    // Settings gear (bottom-right), opens the settings popup.
     let t = theme::palette(p);
     let gear_rect = sq(d, 0.925, 0.9);
     let resp = icon_button(ui, p, gear_rect, "settings");

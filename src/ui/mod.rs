@@ -18,29 +18,23 @@ use crate::theme;
 /// Aspect ratio (w:h) of the device body, close to the real TM-60.
 const ASPECT: f32 = 1.62;
 
-/// Fixed design width of the device (in points). The whole drawing is a fixed
-/// size; the user scales it with scroll-to-zoom, so fonts/strokes (also in
-/// points) scale uniformly with the body instead of staying a fixed pixel size.
+/// Fixed design width (points). Fonts/strokes are also in points, so
+/// scroll-to-zoom scales the whole device uniformly.
 const BASE_WIDTH: f32 = 820.0;
 
 /// Draw the whole device and handle its controls.
 pub fn draw_device(ui: &mut Ui, app: &mut Tm2077App) {
-    // Fixed-size device, centred in the available area. (Zoom / keyboard / gesture
-    // input is handled up front in `Tm2077App::handle_input`.)
+    // Fixed-size device, centred. (Zoom/keyboard/gesture handled in `handle_input`.)
     let avail = ui.available_rect_before_wrap();
     let device = Rect::from_center_size(avail.center(), vec2(BASE_WIDTH, BASE_WIDTH / ASPECT));
     let p = ui.painter().clone();
 
     paint_body(&p, device);
+    leds(&p, device, app); // in the bezel just above the LCD
 
-    // Tuning LEDs sit in the black bezel just above the LCD.
-    leds(&p, device, app);
-
-    // The amber LCD occupies the upper-centre of the face.
     let lcd = rel_rect(device, 0.225, 0.135, 0.775, 0.60);
     lcd::draw(&p, lcd, app);
 
-    // All hardware controls (buttons/rockers) around it, with interaction.
     controls::draw(ui, &p, device, lcd, app);
 }
 
@@ -126,9 +120,8 @@ pub(crate) fn frac_pos(r: Rect, fx: f32, fy: f32) -> Pos2 {
 // Shared widgets
 // ---------------------------------------------------------------------------
 
-/// A square rubber push-button chrome (gradient + hover/press states) with no
-/// label; the caller paints an icon over the returned rect. Same look as the
-/// rocker buttons. Returns the interaction response.
+/// Square rubber push-button chrome (no label); the caller paints an icon over
+/// the returned rect. Same look as the rocker buttons.
 pub(crate) fn icon_button(ui: &mut Ui, p: &egui::Painter, rect: Rect, tag: &str) -> Response {
     let t = theme::palette(p);
     let resp = interact(ui, rect, tag);
@@ -281,9 +274,8 @@ pub(crate) fn fill_gradient_v_cr(
     cr: CornerRadius,
 ) {
     use egui::epaint::{Mesh, Vertex, WHITE_UV};
-    // Fill a rounded-rect mesh with a smooth vertical gradient (per-vertex
-    // colour). A triangle fan from the centre fills the convex rounded shape, so
-    // the fill's corners match the rounded outline exactly — no square nubs.
+    // Per-vertex vertical gradient. A triangle fan from the centre keeps the
+    // fill's corners on the rounded outline exactly — no square nubs.
     let h = rect.height().max(1.0);
     let col = |y: f32| lerp_color(top, bottom, ((y - rect.min.y) / h).clamp(0.0, 1.0));
     let ring = rounded_rect_ring(rect, cr);

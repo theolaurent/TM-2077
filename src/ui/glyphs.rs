@@ -25,8 +25,7 @@ pub fn gear(p: &egui::Painter, c: Pos2, radius: f32, color: Color32) {
         let d = vec2(a.cos(), a.sin());
         rounded_bar(p, c + d * rim, c + d * radius, tw, tw * 0.35, color);
     }
-    // Thicken inward: shrink the radius by half the width so the outer edge
-    // stays at `rim` (where the teeth meet it) and the ring grows toward centre.
+    // Grow the ring inward so its outer edge stays at `rim`, where the teeth meet.
     let ring_w = sw * 1.7;
     p.circle_stroke(c, rim - ring_w * 0.5, Stroke::new(ring_w, color));
 }
@@ -71,9 +70,9 @@ pub fn marker_down(p: &egui::Painter, c: Pos2, size: f32, color: Color32) {
     p.add(Shape::convex_polygon(pts, color, Stroke::NONE));
 }
 
-/// A flat (♭) glyph centred at `c`; `h` is the half-height. A thin tall stem
-/// with a hollow bowl that has calligraphic weight — the loop swells at its
-/// belly and tapers where it meets the stem, enclosing an open hole.
+/// A flat (♭) glyph centred at `c`; `h` is the half-height. Thin tall stem with a
+/// calligraphic bowl that swells at the belly and tapers to the stem, leaving an
+/// open hole.
 pub fn flat(p: &egui::Painter, c: Pos2, h: f32, color: Color32) {
     flat_bowl(p, c, h, color, 1.0);
 }
@@ -96,10 +95,8 @@ fn flat_bowl(p: &egui::Painter, c: Pos2, h: f32, color: Color32, sign: f32) {
         Stroke::new(stem_w, color),
     );
 
-    // Bowl outline as a cubic bézier from the mid-stem, out to the side and back
-    // to a point low on the stem. Sampled into overlapping dots whose radius
-    // swells at the belly and tapers to the stem, so the loop is heavier in the
-    // middle and leaves an open hole against the stem.
+    // Bowl: a cubic bézier from mid-stem, out to the side and back low on the
+    // stem, sampled into dots whose radius swells at the belly (see `r` below).
     let (p0, p1, p2, p3) = (
         pos2(stem_x, c.y - h * 0.1),
         pos2(stem_x + sign * w * 1.15, c.y - h * 0.15),
@@ -122,9 +119,8 @@ fn flat_bowl(p: &egui::Painter, c: Pos2, h: f32, color: Color32, sign: f32) {
     }
 }
 
-/// A sharp (♯) glyph centred at `c`; `h` is the half-height. Two upright bars
-/// crossed by two thicker upward-slanting bars, both pairs overshooting the
-/// crossing as in a real music sharp.
+/// A sharp (♯) glyph centred at `c`; `h` is the half-height. Two uprights crossed
+/// by two heavier rising bars, both pairs overshooting as in a real sharp.
 pub fn sharp(p: &egui::Painter, c: Pos2, h: f32, color: Color32) {
     sharp_bars(p, c, h, color, false);
 }
@@ -134,11 +130,11 @@ pub fn half_sharp(p: &egui::Painter, c: Pos2, h: f32, color: Color32) {
     sharp_bars(p, c, h, color, true);
 }
 
-/// The sharp glyph, shared by the full and half variants. `single` draws the
-/// half-sharp — one central upright and a narrower, less-slanted body — while the
-/// full sharp gets two flanking uprights; the two rising crossbars are common.
+/// Shared by the full and half sharp. `single` draws the half-sharp: one central
+/// upright, narrower and less slanted. Full sharp gets two flanking uprights; the
+/// two rising crossbars are common.
 fn sharp_bars(p: &egui::Painter, c: Pos2, h: f32, color: Color32, single: bool) {
-    // Horizontals are distinctly heavier than the uprights, as in a real sharp.
+    // Horizontals are heavier than the uprights, as in a real sharp.
     let v_stroke = Stroke::new((h * 0.11).max(1.0), color);
     let h_stroke = Stroke::new((h * 0.30).max(1.8), color);
     // The half-sharp is narrower and its crossbars slant less.

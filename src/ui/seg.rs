@@ -63,18 +63,18 @@ pub fn digit(p: &egui::Painter, rect: Rect, d: Option<u8>, ink: Color32) {
     }
 }
 
-/// The digit shown in column `i` (from the left) of a right-aligned `count`-cell
-/// readout of `value`, or `None` for a blank cell. Pure so it can be unit-tested.
+/// The digit in column `i` (from the left) of a right-aligned `count`-cell
+/// readout of `value`, or `None` for a blank cell. Pure, for unit tests.
 ///
-/// Two ways a cell blanks: a leading position above the value's magnitude, or —
-/// when `value` needs more digits than there are cells — the *whole* field, so it
-/// never lies by showing only the low digits (e.g. 1319 in 3 cells must not read
-/// "319"). `None` is also returned for an out-of-range `i` (`i >= count`).
+/// A cell blanks for a leading position above the value's magnitude, or — when
+/// `value` overflows `count` digits — the *whole* field, so it never lies by
+/// showing only the low digits (1319 in 3 cells is blank, not "319"). Out-of-range
+/// `i` (`i >= count`) is also `None`.
 fn digit_at(value: u32, count: usize, i: usize) -> Option<u8> {
-    // Decimal place this column maps to: leftmost is the highest place.
+    // Decimal place for this column; leftmost is the highest.
     let place = count.checked_sub(1)?.checked_sub(i)? as u32;
     let pow = 10u32.checked_pow(place)?;
-    // Does the value fit in `count` digits at all?
+    // Does `value` fit in `count` digits at all?
     let fits = 10u32
         .checked_pow(count as u32)
         .is_none_or(|cap| value < cap);
@@ -87,7 +87,7 @@ pub fn number(p: &egui::Painter, rect: Rect, value: u32, count: usize, ink: Colo
     let gap = rect.width() * 0.06 / count as f32;
     let cell_w = (rect.width() - gap * (count as f32 - 1.0)) / count as f32;
 
-    // Painting is a side effect, so the placement loop stays imperative.
+    // Painting is a side effect, so the loop stays imperative.
     for i in 0..count {
         let cell = Rect::from_min_size(
             pos2(rect.min.x + i as f32 * (cell_w + gap), rect.min.y),
@@ -97,10 +97,9 @@ pub fn number(p: &egui::Painter, rect: Rect, value: u32, count: usize, ink: Colo
     }
 }
 
-/// Segments lit for a note letter A–G in a 14-segment layout (these letters need
-/// only the straight segments — no diagonals). Order:
-/// `[a, b, c, d, e, f, g1, g2, i, l]` where g1/g2 are the split middle bar and
-/// i/l are the upper/lower centre verticals.
+/// Segments lit for a note letter A–G in a 14-segment layout (A–G need only the
+/// straight segments — no diagonals). Order `[a, b, c, d, e, f, g1, g2, i, l]`:
+/// g1/g2 are the split middle bar, i/l the upper/lower centre verticals.
 fn letter_segs(name: Name) -> [bool; 10] {
     match name {
         Name::A => [

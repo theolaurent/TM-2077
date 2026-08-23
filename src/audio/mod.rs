@@ -9,9 +9,8 @@ mod tuner_native;
 #[cfg(target_arch = "wasm32")]
 mod tuner_web;
 
-// The tuner is a platform backend used directly (cpal input on native,
-// getUserMedia + AnalyserNode on web). `AudioEngine` is the single facade over
-// it and the metronome, so the backend needs no extra wrapper layer.
+// Platform tuner backend used directly (cpal input on native, getUserMedia +
+// AnalyserNode on web); `AudioEngine` is the sole facade over it and the metronome.
 #[cfg(not(target_arch = "wasm32"))]
 use tuner_native::NativeTuner as Tuner;
 #[cfg(target_arch = "wasm32")]
@@ -69,7 +68,7 @@ impl AudioEngine {
     }
 
     // --- Lifecycle ---
-    /// Called once per frame to advance any polling-based work (web tuner).
+    /// Advance any polling-based work (web tuner). Called once per frame.
     pub fn poll(&mut self) {
         self.tuner.poll();
     }

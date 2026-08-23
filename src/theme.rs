@@ -1,8 +1,7 @@
-//! Colour palette and visual styling for the TM-2077. Two variants — a dark
-//! matte-black body and a light silver body — both with the warm amber backlit
-//! LCD of the Korg TM-60. The active `Palette` is stashed in egui's context data
-//! each frame so the (painter-only) drawing code can read it without threading a
-//! parameter through every function.
+//! Colour palette and visual styling. Two variants — dark matte-black and light
+//! silver body — both with the warm amber Korg-TM-60 LCD. The active `Palette` is
+//! stashed in egui context data each frame so the painter-only drawing code reads
+//! it without threading a parameter through every function.
 
 use egui::Color32;
 use serde::{Deserialize, Serialize};
@@ -96,8 +95,8 @@ impl Palette {
         }
     }
 
-    /// Light silver body. The amber LCD, LEDs and red TAP button are unchanged —
-    /// only the body, buttons and labels flip to a light scheme.
+    /// Light silver body: only body, buttons and labels flip; the amber LCD, LEDs
+    /// and red TAP button stay as the dark set.
     pub fn light() -> Self {
         let dark = Self::dark();
         Self {
@@ -115,7 +114,6 @@ impl Palette {
             btn_label: Color32::from_rgb(0x30, 0x32, 0x36),
             btn_on: dark.btn_on,
 
-            // Everything else (LCD, LEDs, TAP, bezel/frame) stays as the dark set.
             ..dark
         }
     }
@@ -126,8 +124,7 @@ fn palette_id() -> egui::Id {
     egui::Id::new("tm2077_palette")
 }
 
-/// Read the active palette for painting (defaults to dark before the first
-/// `apply`).
+/// Read the active palette for painting (dark before the first `apply`).
 pub fn palette(p: &egui::Painter) -> Palette {
     p.ctx()
         .data(|d| d.get_temp::<Palette>(palette_id()))
@@ -135,7 +132,7 @@ pub fn palette(p: &egui::Painter) -> Palette {
 }
 
 /// Apply `theme` for this frame: stash its palette for the drawing code and set
-/// the egui base visuals (panel background, default text colour).
+/// egui's base visuals (panel background, default text colour).
 pub fn apply(ctx: &egui::Context, theme: Theme) {
     let pal = theme.palette();
     ctx.data_mut(|d| d.insert_temp(palette_id(), pal));

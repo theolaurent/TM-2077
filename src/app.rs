@@ -33,17 +33,16 @@ pub struct MetronomeState {
 
 /// Persisted user settings (bpm/beats/A4/…), stored via eframe.
 ///
-/// `tuner_on` is deliberately *not* persisted: like `running`, it's a live
-/// transport toggle, not a preference. It also can't take effect until a user
-/// gesture unlocks the mic (autoplay policy), so restoring it "on" would show an
-/// armed-but-silent tuner after a reload. The tuner always boots off. (Any
-/// `tuner_on` field in an older save is simply ignored on load.)
+/// `tuner_on` is deliberately *not* persisted: it's a live transport toggle, not
+/// a preference, and can't take effect until a user gesture unlocks the mic
+/// (autoplay policy) — so restoring it "on" would show an armed-but-silent tuner.
+/// The tuner always boots off.
 #[derive(Serialize, Deserialize)]
 struct Settings {
     bpm: u32,
     beats_per_bar: u32,
     a4: f32,
-    // `serde(default)` keeps older saved settings (without these fields) loadable.
+    // `serde(default)` keeps older saves (lacking these fields) loadable.
     #[serde(default)]
     theme: theme::Theme,
     #[serde(default)]
@@ -54,9 +53,8 @@ struct Settings {
     tempo_graduated: bool,
     #[serde(default)]
     sound: Sound,
-    // Which of `(tuner, metronome)` were last on, for the space-bar restore.
-    // Persisted so a restart remembers it; unlike `tuner_on`/`running` this is a
-    // preference (what space should bring back), not the live transport state.
+    // Which of `(tuner, metronome)` were last on — what the space bar should
+    // bring back. A preference (persisted), not the live transport state.
     #[serde(default = "default_last_on")]
     last_on: (bool, bool),
     // UI zoom factor (scroll / pinch), persisted so the device keeps its size.
@@ -64,7 +62,7 @@ struct Settings {
     zoom: f32,
 }
 
-/// Seed for `last_on`: the metronome, so a fresh install's first space press is
+/// Seed for `last_on`: metronome only, so a fresh install's first space press is
 /// a plain metronome play/pause.
 fn default_last_on() -> (bool, bool) {
     (false, true)
@@ -78,11 +76,11 @@ fn default_zoom() -> f32 {
 /// How many recent taps TAP TEMPO averages into a bpm.
 const TAP_COUNT: usize = 4;
 
-// Shared value ranges, so one bound lives in one place instead of being repeated
-// (and drifting) across the UI, the tap-tempo maths and the audio engine.
+// Shared value ranges: one bound in one place, so the UI, the tap-tempo maths
+// and the audio engine can't drift apart.
 
-/// Tempo bounds enforced by every UI path (manual TEMPO rocker, TAP TEMPO). The
-/// audio engine clamps to the same range as a defensive net.
+/// Tempo bounds, enforced by every UI path (TEMPO rocker, TAP TEMPO); the audio
+/// engine re-clamps as a defensive net.
 pub(crate) const BPM_MIN: u32 = 30;
 pub(crate) const BPM_MAX: u32 = 300;
 
@@ -128,13 +126,10 @@ pub struct Tm2077App {
     /// Whether the settings popup is open.
     pub settings_open: bool,
     /// The last non-empty on-set — which of `(tuner, metronome)` were running —
-    /// so the space bar can restore it after it has stopped both. Updated every
-    /// frame something is on, and persisted across restarts (see `Settings`).
-    /// Seeded to the metronome so the very first space press (nothing ever on
-    /// yet) starts the metronome, matching a plain play/pause.
+    /// so the space bar can restore it after stopping both. See `Settings`.
     last_on: (bool, bool),
-    /// Live UI zoom factor, mirrored from the egui context each frame so it can
-    /// be persisted (the `save` hook has no context to read it from).
+    /// Live UI zoom, mirrored from the egui context each frame so `save` (which
+    /// has no context) can persist it.
     zoom: f32,
 }
 
@@ -145,8 +140,7 @@ impl Tm2077App {
             .and_then(|s| eframe::get_value::<Settings>(s, eframe::APP_KEY))
             .unwrap_or_default();
 
-        // Restore the persisted zoom (sanitised), applying it to the context so
-        // the device opens at its remembered size.
+        // Restore the persisted zoom (sanitised) so the device opens at its size.
         let zoom = if s.zoom.is_finite() {
             s.zoom.clamp(ZOOM_MIN, ZOOM_MAX)
         } else {
@@ -158,8 +152,8 @@ impl Tm2077App {
             // The tuner always boots off (not persisted — see `Settings`).
             tuner_on: false,
             tuner: TunerState {
-                // Clamp persisted values on load: an older or hand-edited save
-                // must not seed an out-of-range (or non-finite) calibration.
+                // Clamp on load: an old or hand-edited save must not seed an
+                // out-of-range (or non-finite) calibration.
                 a4: if s.a4.is_finite() {
                     s.a4.clamp(A4_MIN, A4_MAX)
                 } else {
@@ -181,9 +175,8 @@ impl Tm2077App {
             tap_times: Vector::new(),
             theme: s.theme,
             settings_open: false,
-            // Restore the persisted on-set, but never a both-off value (which
-            // would leave the space bar with nothing to bring back) — fall back
-            // to the metronome default.
+            // Never restore a both-off on-set (nothing for space to bring back)
+            // — fall back to the metronome default.
             last_on: match s.last_on {
                 (false, false) => default_last_on(),
                 on => on,
@@ -211,8 +204,8 @@ impl Tm2077App {
     /// bar (play/pause), and the continuous-repaint decision. Returns whether a
     /// user gesture (click or space) happened this frame, so the caller can unlock
     /// web audio *after* the frame's settings are live. Per-widget interaction
-    /// (buttons, rockers, tap) stays with the widgets in `ui/controls.rs`, and the
-    /// settings popup handles its own Escape / click-outside.
+    /// lives with the widgets in `ui/controls.rs`; the settings popup handles its
+    /// own Escape / click-outside.
     fn handle_input(&mut self, ui: &mut egui::Ui) -> bool {
         let (scroll, pinch, any_down, clicked) = ui.input(|i| {
             (
@@ -223,11 +216,9 @@ impl Tm2077App {
             )
         });
 
-        // Space is play/pause and *only* that — consume the key event so it never
-        // also reaches a focused widget (e.g. a settings option), which would
-        // otherwise both toggle the metronome and actuate that widget. `input_mut`
-        // removes the matching events; `repeat: false` so a held space doesn't
-        // toggle every frame (OS key-repeat), and no modifiers so Ctrl+Space etc.
+        // Space is play/pause and *only* that: consume the event so it can't also
+        // actuate a focused widget (e.g. a settings option). `repeat: false` so a
+        // held space doesn't toggle every frame; no modifiers so Ctrl+Space etc.
         // fall through untouched.
         let space = ui.input_mut(|i| {
             let mut pressed = false;
@@ -248,8 +239,8 @@ impl Tm2077App {
             pressed
         });
 
-        // Scroll-to-zoom (mouse wheel / trackpad) and pinch-to-zoom (two-finger on
-        // touchscreens, ctrl+scroll on desktop) both scale the whole UI together.
+        // Scroll-to-zoom (wheel / trackpad) and pinch-to-zoom (two-finger touch,
+        // ctrl+scroll on desktop) both scale the whole UI together.
         if scroll != 0.0 || pinch != 1.0 {
             let z = (ui.ctx().zoom_factor() * pinch * (scroll * 0.0015).exp())
                 .clamp(ZOOM_MIN, ZOOM_MAX);
@@ -258,10 +249,8 @@ impl Tm2077App {
         // Mirror the live zoom so `save` can persist it (it has no context).
         self.zoom = ui.ctx().zoom_factor();
 
-        // Space bar is a global play/pause across both instruments (works even
-        // with settings open): if either the tuner or the metronome is on it
-        // stops both; if both are off it restores whichever were on last (see
-        // `last_on`).
+        // Global play/pause across both instruments (even with settings open):
+        // if either is on, stop both; if both off, restore `last_on`.
         if space {
             if self.tuner_on || self.metronome.running {
                 self.tuner_on = false;
@@ -271,26 +260,24 @@ impl Tm2077App {
             }
         }
 
-        // Drive continuous repaints only while something animates (beat dots /
-        // needle) or a pointer is held (so the rockers' press-and-hold auto-repeat
-        // keeps ticking); otherwise let egui idle and repaint on input, saving
-        // CPU/GPU. The metronome audio is unaffected — it runs on the audio thread.
+        // Repaint continuously only while something animates (needle) or a pointer
+        // is held (so rockers' press-and-hold auto-repeat keeps ticking);
+        // otherwise idle and repaint on input. Audio is unaffected (own thread).
         if self.metronome.running || self.tuner_on || any_down {
             ui.ctx().request_repaint();
         }
 
-        // A click or the space bar counts as a user gesture (needed to unlock web
-        // audio / mic). Reported back so the caller can act on it at end of frame.
+        // A click or space is a user gesture (needed to unlock web audio / mic);
+        // reported so the caller can act at end of frame.
         clicked || space
     }
 
     /// Register a TAP TEMPO tap at time `now` (seconds) and update the bpm from
     /// the average of recent tap intervals.
     pub fn tap_tempo(&mut self, now: f64) {
-        // Start a fresh sequence if the previous tap was long ago, otherwise keep
-        // the recent history — then append `now` and keep only the last 4 taps.
-        // `base` is a cheap structural-sharing clone (or a fresh empty vector), so
-        // the local `push_back` copies-on-write instead of touching `self.tap_times`.
+        // Restart the sequence if the previous tap was long ago, else keep history;
+        // then append `now` and keep the last `TAP_COUNT`. `base` is a cheap
+        // structural-sharing clone, so `push_back` copies-on-write.
         let restart = matches!(self.tap_times.last(), Some(&last) if now - last > 2.0);
         let mut base = if restart {
             Vector::new()
@@ -306,8 +293,7 @@ impl Tm2077App {
         self.tap_times = taps;
     }
 
-    /// The settings popup (opened by the gear button), styled to match the
-    /// device. Kept intentionally small for now.
+    /// The settings popup (opened by the gear button), styled to match the device.
     fn settings_ui(&mut self, ctx: &egui::Context, was_open: bool) {
         if !self.settings_open {
             return;
@@ -340,8 +326,7 @@ impl Tm2077App {
                 v.selection.bg_fill = pal.lcd_bg;
                 v.selection.stroke = egui::Stroke::new(1.0, pal.lcd_ink);
 
-                // THEME label with the close cross pushed to the top-right of the
-                // same row, so the cross doesn't claim a row of its own.
+                // THEME label with the close cross on the same row's right edge.
                 ui.horizontal(|ui| {
                     ui.label("THEME");
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
@@ -411,8 +396,8 @@ impl Tm2077App {
             self.settings_open = false;
         }
 
-        // A click anywhere outside the popup closes it — but not on the frame it
-        // was opened, so the opening click doesn't immediately dismiss it.
+        // A click outside the popup closes it — but not on its opening frame, so
+        // the opening click doesn't immediately dismiss it.
         if was_open {
             let win_rect = inner.map(|r| r.response.rect);
             let close_it = ctx.input(|i| {
@@ -428,8 +413,8 @@ impl Tm2077App {
     }
 }
 
-/// The last `keep` elements as a new persistent vector. Structural sharing makes
-/// both the `clone` and the rebuild cheap.
+/// The last `keep` elements as a new persistent vector (structural sharing keeps
+/// both the `clone` and the rebuild cheap).
 fn keep_last(taps: &Vector<f64>, keep: usize) -> Vector<f64> {
     match taps.len().checked_sub(keep) {
         Some(skip) if skip > 0 => taps.iter().skip(skip).copied().collect(),
@@ -448,8 +433,7 @@ fn tapped_bpm(taps: &Vector<f64>) -> Option<u32> {
         .map(|avg| ((60.0 / avg).round() as i64).clamp(BPM_MIN as i64, BPM_MAX as i64) as u32)
 }
 
-/// Traditional Maelzel metronome graduations (40–208 bpm): dense at the low end,
-/// coarser as the tempo rises.
+/// Traditional Maelzel graduations (40–208 bpm): dense low, coarser as tempo rises.
 const GRADUATIONS: [u32; 39] = [
     40, 42, 44, 46, 48, 50, 52, 54, 56, 58, 60, 63, 66, 69, 72, 76, 80, 84, 88, 92, 96, 100, 104,
     108, 112, 116, 120, 126, 132, 138, 144, 152, 160, 168, 176, 184, 192, 200, 208,
@@ -479,20 +463,18 @@ impl eframe::App for Tm2077App {
         // Apply the active theme (device palette + egui base visuals) up front.
         theme::apply(ui.ctx(), self.theme);
 
-        // Paint the backdrop behind the device ourselves. eframe hands `ui` a bare
-        // root with no panel background, so `panel_fill` alone never shows — fill
-        // the whole viewport with the theme's panel colour (otherwise the Light
-        // theme's light surround would stay the default dark).
+        // Paint the backdrop ourselves: eframe's bare root has no panel background,
+        // so `panel_fill` alone never shows — fill the viewport with the theme's
+        // panel colour (else the Light theme's surround stays the default dark).
         let screen = ui.ctx().input(|i| i.viewport_rect());
         ui.painter()
             .rect_filled(screen, egui::CornerRadius::ZERO, self.theme.palette().panel);
 
-        // All frame-global input — zoom, the space-bar play/pause, and the
-        // repaint/gesture decision — in one pass. Widget interaction (buttons,
-        // rockers, tap) stays with the widgets in `ui/controls.rs`.
+        // All frame-global input (zoom, space play/pause, repaint/gesture) in one
+        // pass; per-widget interaction stays in `ui/controls.rs`.
         let gesture = self.handle_input(ui);
-        // Whether the settings popup was already open *before* this frame's clicks
-        // — so the click that opens it doesn't also close it.
+        // Was the popup open *before* this frame's clicks — so the opening click
+        // doesn't also close it.
         let settings_was_open = self.settings_open;
 
         // Pull the latest audio state into the display model.
@@ -507,10 +489,8 @@ impl eframe::App for Tm2077App {
         // Draw + handle controls (may toggle running, change bpm, a4, tap, …).
         ui::draw_device(ui, self);
 
-        // Remember the current on-set (however it was reached — space or the
-        // pills) whenever at least one instrument is on, so a later space press
-        // that stopped both can restore it. Both-off is never recorded, so
-        // `last_on` always holds the last thing that was actually running.
+        // Record the current on-set whenever at least one instrument is on, so a
+        // later space press can restore it. Both-off is never recorded.
         if self.tuner_on || self.metronome.running {
             self.last_on = (self.tuner_on, self.metronome.running);
         }
@@ -527,9 +507,8 @@ impl eframe::App for Tm2077App {
         self.audio.tuner_set_scale(self.tuner.scale);
         self.audio.tuner_set_transpose(self.tuner.transpose);
 
-        // Now that this frame's settings are live, act on any user gesture — so a
-        // click (or the space bar) that just started the metronome unlocks audio
-        // and prompts for the mic.
+        // Settings are now live, so act on any gesture — a click/space that just
+        // started an instrument unlocks audio and prompts for the mic.
         if gesture {
             self.audio.on_user_gesture();
         }

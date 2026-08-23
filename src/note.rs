@@ -1,8 +1,8 @@
-//! Musical notation and pitch mapping: a `Note` is one of the seven natural
-//! names with an optional accidental (including quarter-tone demi-accidentals).
-//! A `Scale` is a list of spelled degrees, each with a frequency ratio to the
-//! tonic (Scala `.scl`-style). Detected frequencies snap to the nearest degree,
-//! anchored so that natural A in octave 4 sounds at the `a4` reference.
+//! Musical notation and pitch mapping. A `Note` is a natural name plus an
+//! optional accidental (including quarter-tone demi-accidentals). A `Scale` is a
+//! list of spelled degrees, each with a frequency ratio to the tonic (Scala
+//! `.scl`-style). Detected frequencies snap to the nearest degree, anchored so
+//! natural A in octave 4 sounds at the `a4` reference.
 
 use imbl::Vector;
 use serde::{Deserialize, Serialize};
@@ -33,9 +33,8 @@ impl Name {
         }
     }
 
-    // Terse spelling constructors, so the degree tables read `A.sharp()`,
-    // `B.dflat()`, etc. Only the accidentals the built-in scales use are
-    // provided (add `flat`/others when a scale needs them).
+    // Terse spelling constructors so the degree tables read `A.sharp()`,
+    // `B.dflat()`, etc. Only the accidentals the built-in scales use exist.
     const fn nat(self) -> Note {
         Note {
             name: self,
@@ -101,9 +100,9 @@ impl Note {
     }
 }
 
-/// One degree of a scale: a spelled note and its frequency ratio to the tonic
-/// (`1/1` = natural A). Storing the ratio explicitly keeps the door open for
-/// arbitrary (Scala `.scl`) scales later; the built-ins derive it from the note.
+/// One scale degree: a spelled note and its frequency ratio to the tonic (`1/1`
+/// = natural A). Storing the ratio explicitly leaves room for arbitrary (Scala
+/// `.scl`) scales later; the built-ins derive it from the note.
 #[derive(Clone, Copy)]
 struct Degree {
     note: Note,
@@ -131,36 +130,23 @@ pub enum Scale {
 }
 
 impl Scale {
-    /// The scale's degrees, ascending within one octave from the tonic, each
-    /// carrying its spelled note and ratio. Spelling lives here — Chromatic is
-    /// sharp-only, Guitar is naturals, QuarterTone uses demi-accidentals.
+    /// The scale's degrees, ascending within one octave, each with its spelled
+    /// note and ratio. Spelling lives here: Chromatic is sharp-only, Guitar is
+    /// naturals, QuarterTone uses demi-accidentals.
     ///
-    /// # Tonic and anchoring (why `1/1` = A)
+    /// **Why `1/1` = A:** the app is anchored on A4 = `a4` Hz (the one calibration
+    /// knob), so rooting every scale at natural A makes A's ratio `1.0` and a
+    /// degree's pitch is just `a4 · ratio · 2^octave` — no per-scale tonic offset.
+    /// (Scales are conventionally written from C; starting at A is invisible to
+    /// the user, who sees the spelled note.)
     ///
-    /// Scala scales are relative to an arbitrary tonic (`1/1`); this app is
-    /// anchored on **A4 = `a4` Hz** (the single calibration knob). Rooting every
-    /// scale at natural **A** makes A's ratio exactly `1.0`, so a degree's
-    /// absolute pitch is just `a4 · ratio · 2^octave` with no per-scale tonic
-    /// offset to track. Conventionally scales are written from C; here they start
-    /// at A purely to line up with the anchor. This is invisible to the user
-    /// (the readout shows the spelled note, not the tonic).
+    /// **Simplifying assumptions (revisit for imported `.scl`):** period fixed at
+    /// `2/1` with the octave degree implied (no non-octave scales); anchoring
+    /// assumes a natural-A degree exists (all three built-ins have one); ratios
+    /// are derived from the spelling via [`Note::semitones_from_a`], so they can't
+    /// drift for 12-/24-TET (imported ratios would be stored on [`Degree`]).
     ///
-    /// # Simplifying assumptions (revisit for imported `.scl`)
-    ///
-    /// - **Octave periodicity:** the period is fixed at `2/1` and the octave
-    ///   degree is implied, not listed. Non-octave scales (e.g. Bohlen-Pierce's
-    ///   `3/1`) are not yet supported.
-    /// - **Contains A:** anchoring assumes a natural-A degree exists (all three
-    ///   built-ins have one). A generic scale without an A — or with a different
-    ///   reference pitch — needs an explicit reference map (Scala KBM), deferred
-    ///   until real `.scl` import.
-    /// - **Derived ratios:** the built-ins derive each ratio from its spelling
-    ///   via [`Note::semitones_from_a`], so spelling and ratio can't drift for
-    ///   12-/24-TET. Arbitrary imported ratios would instead be stored directly
-    ///   on [`Degree`].
-    ///
-    /// Note: this rebuilds the `Vector` on every call (once per detected reading,
-    /// ~60 fps). Fine for these small tables; memoize if it ever shows up.
+    /// Rebuilds the `Vector` per call (~60 fps); fine for these small tables.
     fn notes(self) -> Vector<Degree> {
         use Name::{A, B, C, D, E, F, G};
         let notes: &[Note] = match self {
@@ -236,9 +222,8 @@ impl Transposition {
     }
 }
 
-/// Tolerance, in cents, within which a reading counts as in tune. The single
-/// source of truth for both the `in_tune()` test and the LCD's flat/in-tune/sharp
-/// LED decision (`ui::leds`), so the threshold can't drift between them.
+/// In-tune tolerance in cents. Single source of truth for both `in_tune()` and
+/// the LCD's flat/in-tune/sharp LEDs (`ui::leds`), so they can't drift apart.
 pub const IN_TUNE_CENTS: f32 = 4.0;
 
 /// A pitch reading derived from a detected frequency.
@@ -267,25 +252,24 @@ impl NoteReading {
         let written = freq as f64 * 2f64.powf(transpose.semitones() as f64 / 12.0);
         let x = (written / a4 as f64).log2();
 
-        // Pick the degree (in whichever octave) closest to x in log-frequency.
+        // Pick the degree (in any octave) closest to x in log-frequency.
         let (note, pos) = scale
             .notes()
             .iter()
             .map(|d| {
-                let rel = d.ratio.log2(); // degree offset from A within an octave, in [0, 1)
-                let pos = rel + (x - rel).round(); // nearest octave-shifted copy of this degree
+                let rel = d.ratio.log2(); // degree offset from A, in [0, 1)
+                let pos = rel + (x - rel).round(); // nearest octave copy
                 (d.note, pos, (x - pos).abs())
             })
             .min_by(|a, b| a.2.total_cmp(&b.2))
             .map(|(note, pos, _)| (note, pos))?;
 
         let cents = ((x - pos) * 1200.0) as f32;
-        // Scientific octaves change at C, so the octave has to follow the note's
-        // *letter*, not the raw pitch. A quarter-tone accidental lands the pitch
-        // on a half-semitone (e.g. B half-sharp ≈ MIDI 71.5); rounding that to a
-        // MIDI number would cross the B/C boundary and mislabel the octave (B5
-        // instead of B4). So anchor on the natural name — always a whole semitone
-        // — and take the octave copy nearest the reading. A4 = MIDI 69.
+        // Scientific octaves change at C, so the octave must follow the *letter*,
+        // not the raw pitch: a quarter-tone accidental sits on a half-semitone
+        // (B half-sharp ≈ MIDI 71.5) that would round across the B/C boundary and
+        // mislabel B4 as B5. Anchor on the natural name (a whole semitone) and take
+        // the nearest octave copy. A4 = MIDI 69.
         let rel_nat =
             (note.name.semitones_from_c() - Name::A.semitones_from_c()).rem_euclid(12.0) / 12.0;
         let pos_nat = rel_nat + (pos - rel_nat).round();
