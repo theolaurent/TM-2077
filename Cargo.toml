@@ -19,9 +19,9 @@ pitch-detection = "0.3"
 # Error handling. This project is strictly no-panic (see AGENTS.md): every
 # fallible operation returns `anyhow::Result` and is propagated with `?`.
 anyhow = "1"
-# Persistent (immutable) data structures for the functional-first style
-# (see AGENTS.md). Cheap structural-sharing clones instead of in-place mutation.
-rpds = "1"
+# Persistent data structures for the functional-first style (see AGENTS.md):
+# copy-on-write collections with cheap structural-sharing clones.
+imbl = "7"
 
 # --- Native-only (desktop) ---
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
@@ -57,6 +57,24 @@ web-sys = { version = "0.3", features = [
     "AudioNode",
     "AnalyserNode",
 ] }
+
+# Crate-wide lints (see AGENTS.md). The no-panic policy is enforced by the
+# clippy restriction lints below; `unsafe_code` is forbidden outright. Kept here
+# rather than as crate-level `#![...]` attributes so the policy lives in one
+# place. `#[cfg(test)]` modules are exempt from the restriction lints, so CI runs
+# clippy on the shipping targets only (no `--all-targets`).
+[lints.rust]
+unsafe_code = "forbid"
+
+[lints.clippy]
+# `priority = -1` lets the specific restriction lints below override the group.
+all = { level = "warn", priority = -1 }
+unwrap_used = "warn"
+expect_used = "warn"
+panic = "warn"
+todo = "warn"
+unimplemented = "warn"
+unreachable = "warn"
 
 [profile.release]
 opt-level = 2

@@ -1,7 +1,7 @@
 //! Top-level application shell. Models the Korg TM-60: tuner and metronome run
 //! independently and are shown at the same time, driven by the audio engine.
 
-use rpds::Vector;
+use imbl::Vector;
 use serde::{Deserialize, Serialize};
 
 use crate::audio::{AudioEngine, Sound};
@@ -289,14 +289,16 @@ impl Tm2077App {
     pub fn tap_tempo(&mut self, now: f64) {
         // Start a fresh sequence if the previous tap was long ago, otherwise keep
         // the recent history — then append `now` and keep only the last 4 taps.
-        // All of this builds new persistent vectors rather than mutating in place.
+        // `base` is a cheap structural-sharing clone (or a fresh empty vector), so
+        // the local `push_back` copies-on-write instead of touching `self.tap_times`.
         let restart = matches!(self.tap_times.last(), Some(&last) if now - last > 2.0);
-        let base = if restart {
+        let mut base = if restart {
             Vector::new()
         } else {
             self.tap_times.clone()
         };
-        let taps = keep_last(&base.push_back(now), TAP_COUNT);
+        base.push_back(now);
+        let taps = keep_last(&base, TAP_COUNT);
 
         if let Some(bpm) = tapped_bpm(&taps) {
             self.metronome.bpm = bpm;
@@ -438,7 +440,7 @@ fn keep_last(taps: &Vector<f64>, keep: usize) -> Vector<f64> {
 /// Average the consecutive tap intervals into a bpm clamped to 30..=300, or
 /// `None` when there aren't yet enough taps for a well-defined tempo.
 fn tapped_bpm(taps: &Vector<f64>) -> Option<u32> {
-    let (&first, &last) = (taps.first()?, taps.last()?);
+    let (&first, &last) = (taps.front()?, taps.last()?);
     let intervals = taps.len().checked_sub(1)? as f64;
     (intervals >= 1.0)
         .then_some((last - first) / intervals)

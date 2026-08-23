@@ -4,7 +4,7 @@
 //! tonic (Scala `.scl`-style). Detected frequencies snap to the nearest degree,
 //! anchored so that natural A in octave 4 sounds at the `a4` reference.
 
-use rpds::Vector;
+use imbl::Vector;
 use serde::{Deserialize, Serialize};
 
 /// One of the seven natural note names.

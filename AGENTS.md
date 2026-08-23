@@ -17,10 +17,21 @@ applies to all code except `#[cfg(test)]` modules.
 - Panicking conversions or arithmetic (e.g. debug-mode overflow). Use
   `checked_*` / `saturating_*` / `clamp`.
 
-Enforced by lints:
+Enforced by lints in the `[lints]` table of `Cargo.toml` (not crate-level
+`#![...]` attributes), so the whole policy lives in one place:
 
-```rust
-#![warn(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
+```toml
+[lints.rust]
+unsafe_code = "forbid"
+
+[lints.clippy]
+all = { level = "warn", priority = -1 }
+unwrap_used = "warn"
+expect_used = "warn"
+panic = "warn"
+todo = "warn"
+unimplemented = "warn"
+unreachable = "warn"
 ```
 
 **Do instead:**
@@ -48,9 +59,10 @@ genuinely awkward (see exceptions below).
   loop.
 - **Favour pure functions.** Extract logic into small `fn`s with no side
   effects and test them directly. Push side effects to the edges.
-- **Use persistent data structures** from [`rpds`] (`Vector`, `List`, etc.) for
-  evolving collection state — build new values with structural sharing instead
-  of mutating in place.
+- **Use persistent data structures** from [`imbl`] (`Vector`, `HashMap`, etc.)
+  for evolving collection state. They are copy-on-write with cheap
+  structural-sharing clones: clone the value, then update the clone, so the
+  original is left untouched instead of being mutated in place.
 - Immutable by default: `let`, not `let mut`; avoid `&mut` without real payoff.
 
 ### Threads & shared state
@@ -94,7 +106,7 @@ Don't force these into a functional shape:
 
 Keep any mutation's scope as small as possible.
 
-[`rpds`]: https://docs.rs/rpds
+[`imbl`]: https://docs.rs/imbl
 
 ## Type safety & totality
 
