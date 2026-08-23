@@ -75,6 +75,9 @@ panic = "warn"
 todo = "warn"
 unimplemented = "warn"
 unreachable = "warn"
+# No panicking indexing/slicing (`x[i]`, `x[a..b]`); use `.get()` or iterate.
+# Constant in-bounds indexing of a fixed-size array is still allowed by the lint.
+indexing_slicing = "warn"
 
 [profile.release]
 opt-level = 2

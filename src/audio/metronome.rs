@@ -108,6 +108,9 @@ impl Metronome {
 
     /// Lazily open the audio stream. Must be triggered by a user gesture on web
     /// (autoplay policy); harmless to call repeatedly.
+    // Unlike the tuner (which pauses its input to release the mic), the output
+    // stream stays open for the app's lifetime — the callback emits silence while
+    // stopped — so starting the metronome incurs no device-resume latency.
     pub fn ensure_started(&mut self) {
         if self.started {
             return;

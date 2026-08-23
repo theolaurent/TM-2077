@@ -49,8 +49,8 @@ pub fn digit(p: &egui::Painter, rect: Rect, d: Option<u8>, ink: Color32) {
         (pos2(cx, y0 + h * 0.5), true),                  // g
     ];
 
-    for (i, (c, horizontal)) in positions.iter().enumerate() {
-        if !on[i] {
+    for (&lit, (c, horizontal)) in on.iter().zip(&positions) {
+        if !lit {
             continue;
         }
         let len = if *horizontal { lh } else { lv };

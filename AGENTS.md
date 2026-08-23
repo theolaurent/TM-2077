@@ -12,8 +12,12 @@ applies to all code except `#[cfg(test)]` modules.
 
 - `.unwrap()`, `.expect(...)`, `panic!`, `unreachable!`, `todo!`,
   `unimplemented!`, `assert!` / `assert_eq!`.
-- Panicking indexing/slicing — `slice[i]`, `&slice[a..b]` — unless the index is
-  a compile-time constant provably in bounds. Prefer `.get(i)` / `.get(a..b)`.
+- Panicking indexing/slicing — `slice[i]`, `&slice[a..b]`. Enforced by
+  `clippy::indexing_slicing`. Don't index by position: prefer `.get(i)` /
+  `.get(a..b)`, or iterate (`for`, `.zip`, iterator combinators) over the
+  collection instead. (Constant in-bounds indexing of a fixed-size array — e.g.
+  `arr[2]` on a `[T; 4]` — is allowed, as the lint permits it, but reach for an
+  iterator first.)
 - Panicking conversions or arithmetic (e.g. debug-mode overflow). Use
   `checked_*` / `saturating_*` / `clamp`.
 
@@ -32,6 +36,7 @@ panic = "warn"
 todo = "warn"
 unimplemented = "warn"
 unreachable = "warn"
+indexing_slicing = "warn"
 ```
 
 **Do instead:**
