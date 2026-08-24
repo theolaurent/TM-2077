@@ -9,7 +9,7 @@ use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use cpal::{FromSample, Sample, SizedSample};
 
 use crate::audio::pitch::{PitchTracker, WINDOW};
-use crate::note::{NoteReading, Scale, Transposition};
+use crate::note::{Accidentals, NoteReading, Scale, Transposition};
 
 /// Recent samples the consumer keeps for the detector (twice the window, for slack).
 const RING_CAP: usize = WINDOW * 2;
@@ -26,6 +26,7 @@ pub struct NativeTuner {
     a4: f32,
     scale: Scale,
     transpose: Transposition,
+    accidentals: Accidentals,
     reading: Option<NoteReading>,
     /// Consumer half of the sample channel; `None` until the stream is built.
     rx: Option<Receiver<[f32; BLOCK]>>,
@@ -43,6 +44,7 @@ impl NativeTuner {
             a4: 440.0,
             scale: Scale::default(),
             transpose: Transposition::default(),
+            accidentals: Accidentals::default(),
             reading: None,
             rx: None,
             window: Vec::with_capacity(RING_CAP),
@@ -94,6 +96,10 @@ impl NativeTuner {
         self.transpose = transpose;
     }
 
+    pub fn set_accidentals(&mut self, accidentals: Accidentals) {
+        self.accidentals = accidentals;
+    }
+
     pub fn reading(&self) -> Option<NoteReading> {
         self.reading
     }
@@ -124,9 +130,9 @@ impl NativeTuner {
         }
 
         if let Some(tracker) = self.tracker.as_mut() {
-            self.reading = tracker
-                .detect(&self.window)
-                .and_then(|f| NoteReading::from_freq(f, self.a4, self.scale, self.transpose));
+            self.reading = tracker.detect(&self.window).and_then(|f| {
+                NoteReading::from_freq(f, self.a4, self.scale, self.transpose, self.accidentals)
+            });
         }
     }
 

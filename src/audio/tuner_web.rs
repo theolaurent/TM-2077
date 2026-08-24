@@ -10,13 +10,14 @@ use wasm_bindgen_futures::{JsFuture, spawn_local};
 use web_sys::{AnalyserNode, AudioContext, MediaStream, MediaStreamConstraints};
 
 use crate::audio::pitch::{PitchTracker, WINDOW};
-use crate::note::{NoteReading, Scale, Transposition};
+use crate::note::{Accidentals, NoteReading, Scale, Transposition};
 
 pub struct WebTuner {
     enabled: bool,
     a4: f32,
     scale: Scale,
     transpose: Transposition,
+    accidentals: Accidentals,
     reading: Option<NoteReading>,
     analyser: Rc<RefCell<Option<AnalyserNode>>>,
     /// Live mic stream, kept so its tracks can be stopped when the tuner turns off
@@ -42,6 +43,7 @@ impl WebTuner {
             a4: 440.0,
             scale: Scale::default(),
             transpose: Transposition::default(),
+            accidentals: Accidentals::default(),
             reading: None,
             analyser: Rc::new(RefCell::new(None)),
             stream: Rc::new(RefCell::new(None)),
@@ -85,6 +87,10 @@ impl WebTuner {
         self.transpose = transpose;
     }
 
+    pub fn set_accidentals(&mut self, accidentals: Accidentals) {
+        self.accidentals = accidentals;
+    }
+
     pub fn reading(&self) -> Option<NoteReading> {
         self.reading
     }
@@ -124,9 +130,9 @@ impl WebTuner {
         };
 
         if got && let Some(tracker) = self.tracker.as_mut() {
-            self.reading = tracker
-                .detect(&self.buf)
-                .and_then(|f| NoteReading::from_freq(f, self.a4, self.scale, self.transpose));
+            self.reading = tracker.detect(&self.buf).and_then(|f| {
+                NoteReading::from_freq(f, self.a4, self.scale, self.transpose, self.accidentals)
+            });
         }
     }
 

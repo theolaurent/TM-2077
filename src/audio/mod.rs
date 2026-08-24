@@ -63,6 +63,10 @@ impl AudioEngine {
         self.tuner.set_transpose(transpose);
     }
 
+    pub fn tuner_set_accidentals(&mut self, accidentals: crate::note::Accidentals) {
+        self.tuner.set_accidentals(accidentals);
+    }
+
     pub fn tuner_reading(&self) -> Option<NoteReading> {
         self.tuner.reading()
     }

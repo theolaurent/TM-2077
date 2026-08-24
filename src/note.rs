@@ -47,6 +47,12 @@ impl Name {
             accidental: Some(Accidental::Sharp),
         }
     }
+    const fn flat(self) -> Note {
+        Note {
+            name: self,
+            accidental: Some(Accidental::Flat),
+        }
+    }
     const fn dsharp(self) -> Note {
         Note {
             name: self,
@@ -120,7 +126,7 @@ fn degree(note: Note) -> Degree {
 /// Which set of pitches the tuner snaps a reading to.
 #[derive(Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub enum Scale {
-    /// All twelve semitones (12-TET), spelled with sharps only.
+    /// All twelve semitones (12-TET); black keys spelled per [`Accidentals`].
     #[default]
     Chromatic,
     /// Standard guitar open strings only: E A D G B.
@@ -131,8 +137,8 @@ pub enum Scale {
 
 impl Scale {
     /// The scale's degrees, ascending within one octave, each with its spelled
-    /// note and ratio. Spelling lives here: Chromatic is sharp-only, Guitar is
-    /// naturals, QuarterTone uses demi-accidentals.
+    /// note and ratio. Spelling lives here: Chromatic's black keys follow `acc`,
+    /// Guitar is naturals, QuarterTone uses demi-accidentals.
     ///
     /// **Why `1/1` = A:** the app is anchored on A4 = `a4` Hz (the one calibration
     /// knob), so rooting every scale at natural A makes A's ratio `1.0` and a
@@ -147,25 +153,30 @@ impl Scale {
     /// drift for 12-/24-TET (imported ratios would be stored on [`Degree`]).
     ///
     /// Rebuilds the `Vector` per call (~60 fps); fine for these small tables.
-    fn notes(self) -> Vector<Degree> {
+    /// `acc` picks the sharp/flat spelling of the Chromatic black keys; the other
+    /// scales ignore it (see [`Accidentals`]).
+    fn notes(self, acc: Accidentals) -> Vector<Degree> {
         use Name::{A, B, C, D, E, F, G};
-        let notes: &[Note] = match self {
-            Scale::Chromatic => &[
-                A.nat(),
-                A.sharp(),
-                B.nat(),
-                C.nat(),
-                C.sharp(),
-                D.nat(),
-                D.sharp(),
-                E.nat(),
-                F.nat(),
-                F.sharp(),
-                G.nat(),
-                G.sharp(),
-            ],
-            Scale::Guitar => &[A.nat(), B.nat(), D.nat(), E.nat(), G.nat()],
-            Scale::QuarterTone => &[
+        let notes: Vec<Note> = match self {
+            Scale::Chromatic => {
+                let [k1, k2, k3, k4, k5] = acc.black_keys();
+                vec![
+                    A.nat(),
+                    k1,
+                    B.nat(),
+                    C.nat(),
+                    k2,
+                    D.nat(),
+                    k3,
+                    E.nat(),
+                    F.nat(),
+                    k4,
+                    G.nat(),
+                    k5,
+                ]
+            }
+            Scale::Guitar => vec![A.nat(), B.nat(), D.nat(), E.nat(), G.nat()],
+            Scale::QuarterTone => vec![
                 A.nat(),
                 A.dsharp(),
                 A.sharp(),
@@ -192,7 +203,37 @@ impl Scale {
                 A.dflat(),
             ],
         };
-        notes.iter().copied().map(degree).collect()
+        notes.into_iter().map(degree).collect()
+    }
+}
+
+/// How the tuner spells the five chromatic black keys. Enharmonic only — it
+/// relabels a degree, never moves it, so pitch selection is unchanged. Applies to
+/// the Chromatic scale; Guitar is all naturals and Quarter Tone carries its own
+/// demi-accidental spelling, so both ignore it.
+#[derive(Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+pub enum Accidentals {
+    /// All sharps: A♯ C♯ D♯ F♯ G♯.
+    Sharps,
+    /// All flats: B♭ D♭ E♭ G♭ A♭.
+    Flats,
+    /// C♯ and F♯ stay sharp, the rest flat: B♭ C♯ E♭ F♯ A♭.
+    #[default]
+    Mixed,
+}
+
+impl Accidentals {
+    /// The five black keys ascending from A♯/B♭, spelled per this choice. Indices
+    /// 1 and 3 are C♯ and F♯ — the two that stay sharp under `Mixed`.
+    fn black_keys(self) -> [Note; 5] {
+        use Name::{A, B, C, D, E, F, G};
+        let sharps = [A.sharp(), C.sharp(), D.sharp(), F.sharp(), G.sharp()];
+        let flats = [B.flat(), D.flat(), E.flat(), G.flat(), A.flat()];
+        match self {
+            Accidentals::Sharps => sharps,
+            Accidentals::Flats => flats,
+            Accidentals::Mixed => [flats[0], sharps[1], flats[2], sharps[3], flats[4]],
+        }
     }
 }
 
@@ -244,7 +285,13 @@ impl NoteReading {
     /// reference (e.g. 440) and instrument `transpose`. For a transposing
     /// instrument the returned note is the *written* note. Octaves repeat at
     /// `2/1`, anchored so natural A in octave 4 sounds at `a4`.
-    pub fn from_freq(freq: f32, a4: f32, scale: Scale, transpose: Transposition) -> Option<Self> {
+    pub fn from_freq(
+        freq: f32,
+        a4: f32,
+        scale: Scale,
+        transpose: Transposition,
+        acc: Accidentals,
+    ) -> Option<Self> {
         if !freq.is_finite() || freq <= 0.0 || !a4.is_finite() || a4 <= 0.0 {
             return None;
         }
@@ -254,7 +301,7 @@ impl NoteReading {
 
         // Pick the degree (in any octave) closest to x in log-frequency.
         let (note, pos) = scale
-            .notes()
+            .notes(acc)
             .iter()
             .map(|d| {
                 let rel = d.ratio.log2(); // degree offset from A, in [0, 1)
@@ -293,7 +340,22 @@ mod tests {
     use super::*;
 
     fn reading(freq: f32, scale: Scale, transpose: Transposition) -> NoteReading {
-        NoteReading::from_freq(freq, 440.0, scale, transpose).expect("should detect")
+        // Sharps: the historical default, so existing assertions keep their spelling.
+        reading_acc(freq, scale, transpose, Accidentals::Sharps)
+    }
+
+    fn reading_acc(
+        freq: f32,
+        scale: Scale,
+        transpose: Transposition,
+        acc: Accidentals,
+    ) -> NoteReading {
+        NoteReading::from_freq(freq, 440.0, scale, transpose, acc).expect("should detect")
+    }
+
+    /// A pitch `semitones` above A4.
+    fn above_a4(semitones: f32) -> f32 {
+        440.0 * 2f32.powf(semitones / 12.0)
     }
 
     fn note(name: Name, accidental: Option<Accidental>) -> Note {
@@ -383,9 +445,51 @@ mod tests {
 
     #[test]
     fn chromatic_is_sharp_only() {
-        // Whatever the pitch, Chromatic never spells a flat or demi-accidental.
+        // Under the Sharps spelling, Chromatic never spells a flat or demi-accidental.
         let f = 440.0 * 2f32.powf(-4.5 / 12.0);
         let r = reading(f, Scale::Chromatic, Transposition::Concert);
         assert!(matches!(r.note.accidental, None | Some(Accidental::Sharp)));
+    }
+
+    #[test]
+    fn flats_spelling_relabels_black_keys() {
+        // +1 semitone above A4 is A♯ under Sharps, B♭ under Flats — same pitch.
+        let f = above_a4(1.0);
+        let sharp = reading_acc(
+            f,
+            Scale::Chromatic,
+            Transposition::Concert,
+            Accidentals::Sharps,
+        );
+        let flat = reading_acc(
+            f,
+            Scale::Chromatic,
+            Transposition::Concert,
+            Accidentals::Flats,
+        );
+        assert_eq!(sharp.note, note(Name::A, Some(Accidental::Sharp)));
+        assert_eq!(flat.note, note(Name::B, Some(Accidental::Flat)));
+        // Enharmonic: only the label differs, not the detected cents.
+        assert!((sharp.cents - flat.cents).abs() < 0.01);
+    }
+
+    #[test]
+    fn mixed_keeps_c_and_f_sharp_rest_flat() {
+        let spell = |semitones: f32| {
+            reading_acc(
+                above_a4(semitones),
+                Scale::Chromatic,
+                Transposition::Concert,
+                Accidentals::Mixed,
+            )
+            .note
+        };
+        // C♯ (+4) and F♯ (+9) stay sharp.
+        assert_eq!(spell(4.0), note(Name::C, Some(Accidental::Sharp)));
+        assert_eq!(spell(9.0), note(Name::F, Some(Accidental::Sharp)));
+        // The other three black keys are flats: B♭ (+1), E♭ (+6), A♭ (+11).
+        assert_eq!(spell(1.0), note(Name::B, Some(Accidental::Flat)));
+        assert_eq!(spell(6.0), note(Name::E, Some(Accidental::Flat)));
+        assert_eq!(spell(11.0), note(Name::A, Some(Accidental::Flat)));
     }
 }

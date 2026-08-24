@@ -5,7 +5,7 @@ use imbl::Vector;
 use serde::{Deserialize, Serialize};
 
 use crate::audio::{AudioEngine, Sound};
-use crate::note::{NoteReading, Scale, Transposition};
+use crate::note::{Accidentals, NoteReading, Scale, Transposition};
 use crate::{theme, ui};
 
 pub struct TunerState {
@@ -13,6 +13,8 @@ pub struct TunerState {
     pub a4: f32,
     /// Which scale the tuner snaps readings to.
     pub scale: Scale,
+    /// How the tuner spells the chromatic black keys (sharps / flats / mixed).
+    pub accidentals: Accidentals,
     /// Instrument transposition (shows the written note).
     pub transpose: Transposition,
     /// Latest pitch reading, if a note is currently detected.
@@ -47,6 +49,8 @@ struct Settings {
     theme: theme::Theme,
     #[serde(default)]
     scale: Scale,
+    #[serde(default)]
+    accidentals: Accidentals,
     #[serde(default)]
     transpose: Transposition,
     #[serde(default)]
@@ -104,6 +108,7 @@ impl Default for Settings {
             a4: 440.0,
             theme: theme::Theme::default(),
             scale: Scale::default(),
+            accidentals: Accidentals::default(),
             transpose: Transposition::default(),
             tempo_graduated: false,
             sound: Sound::default(),
@@ -160,6 +165,7 @@ impl Tm2077App {
                     440.0
                 },
                 scale: s.scale,
+                accidentals: s.accidentals,
                 transpose: s.transpose,
                 reading: None,
             },
@@ -192,6 +198,7 @@ impl Tm2077App {
             a4: self.tuner.a4,
             theme: self.theme,
             scale: self.tuner.scale,
+            accidentals: self.tuner.accidentals,
             transpose: self.tuner.transpose,
             tempo_graduated: self.metronome.graduated,
             sound: self.metronome.sound,
@@ -367,6 +374,15 @@ impl Tm2077App {
                 });
 
                 ui.add_space(8.0);
+                ui.label("ACCIDENTALS");
+                ui.horizontal_wrapped(|ui| {
+                    let a = &mut self.tuner.accidentals;
+                    ui.selectable_value(a, Accidentals::Sharps, "Sharps");
+                    ui.selectable_value(a, Accidentals::Flats, "Flats");
+                    ui.selectable_value(a, Accidentals::Mixed, "Mixed");
+                });
+
+                ui.add_space(8.0);
                 ui.label("TRANSPOSITION");
                 ui.horizontal_wrapped(|ui| {
                     let tr = &mut self.tuner.transpose;
@@ -505,6 +521,7 @@ impl eframe::App for Tm2077App {
         self.audio.tuner_set_enabled(self.tuner_on);
         self.audio.tuner_set_a4(self.tuner.a4);
         self.audio.tuner_set_scale(self.tuner.scale);
+        self.audio.tuner_set_accidentals(self.tuner.accidentals);
         self.audio.tuner_set_transpose(self.tuner.transpose);
 
         // Settings are now live, so act on any gesture — a click/space that just
